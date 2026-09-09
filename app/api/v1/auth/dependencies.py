@@ -93,6 +93,20 @@ def get_current_user(
     return UserResponse.model_validate(user)
 
 
+def get_optional_current_user(
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+) -> UserResponse | None:
+    """Return the authenticated user when present, without requiring login."""
+    if not authorization:
+        return None
+    try:
+        token = extract_token(authorization)
+        return get_current_user(token, db)
+    except HTTPException:
+        return None
+
+
 def allow_roles(*allowed_roles: UserRole):
     """Create a dependency that requires the current user to have one of the allowed roles."""
     def dependency(current_user: UserResponse = Depends(get_current_user)) -> UserResponse:

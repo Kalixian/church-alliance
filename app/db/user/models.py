@@ -12,7 +12,7 @@ class UserRole(str, enum.Enum):
     """Allowed user roles"""
     APPLICANT = "applicant"
     MEMBER = "member"
-    ORGANIZER = "organizer"
+    COORDINATOR = "coordinator"
     ADMINISTRATOR = "administrator"
 
 
@@ -87,8 +87,8 @@ class User(Base):
     # Relationships
     organized_events = relationship(
         "Event",
-        back_populates="organizer",
-        foreign_keys="Event.organizer_id",
+        back_populates="coordinator",
+        foreign_keys="Event.coordinator_id",
         cascade="all, delete-orphan",
     )
     event_memberships = relationship(
@@ -109,6 +109,10 @@ class User(Base):
     pictures = relationship(
         "Picture",
         back_populates="uploaded_by",
+    )
+    articles = relationship(
+        "Article",
+        back_populates="creator",
     )
     
     def __repr__(self) -> str:

@@ -1,6 +1,6 @@
 """Event model and event members association table"""
 
-from sqlalchemy import Column, String, DateTime, func, Index, ForeignKey, Table, Text
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, String, Table, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 import uuid
@@ -54,9 +54,24 @@ class Event(Base):
         DateTime,
         nullable=False,
     )
+
+    # True when the event is scheduled by date without specific times.
+    all_day = Column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="0",
+    )
+
+    certification_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("certifications.id"),
+        nullable=True,
+        index=True,
+    )
     
-    # Organizer (user that created the event)
-    organizer_id = Column(
+    # Coordinator (user that created the event)
+    coordinator_id = Column(
         UUID(as_uuid=True),
         ForeignKey("users.id"),
         nullable=False,
@@ -79,17 +94,18 @@ class Event(Base):
     
     # Indexes for common queries
     __table_args__ = (
-        Index("idx_organizer_id", "organizer_id"),
+        Index("idx_coordinator_id", "coordinator_id"),
         Index("idx_start_datetime", "start_datetime"),
         Index("idx_name", "name"),
     )
     
     # Relationships
-    organizer = relationship(
+    coordinator = relationship(
         "User",
         back_populates="organized_events",
-        foreign_keys=[organizer_id],
+        foreign_keys=[coordinator_id],
     )
+    certification = relationship("Certification")
     members = relationship(
         "User",
         secondary=event_members,
@@ -97,4 +113,4 @@ class Event(Base):
     )
     
     def __repr__(self) -> str:
-        return f"<Event(id={self.id}, name={self.name}, organizer_id={self.organizer_id})>"
+        return f"<Event(id={self.id}, name={self.name}, coordinator_id={self.coordinator_id})>"

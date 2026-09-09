@@ -23,6 +23,7 @@ class GalleryResponse(GalleryBase):
     id: UUID
     created_at: datetime
     updated_at: datetime
+    picture_count: int
 
     model_config = ConfigDict(from_attributes=True)
 

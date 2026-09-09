@@ -6,6 +6,7 @@ from uuid import UUID
 import cloudinary
 import cloudinary.uploader
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 from app.config import settings
 from app.db.gallery.models import Gallery, Picture
@@ -17,7 +18,7 @@ def _configure_cloudinary() -> None:
     """Configure Cloudinary from the application's settings."""
     if settings.cloudinary_cloud_name and settings.cloudinary_api_key and settings.cloudinary_api_secret:
         cloudinary.config(
-            cloud=settings.cloudinary_cloud_name,
+            cloud_name=settings.cloudinary_cloud_name,
             api_key=settings.cloudinary_api_key,
             api_secret=settings.cloudinary_api_secret,
             secure=True,
@@ -33,7 +34,7 @@ def _upload_picture_to_cloudinary(image_bytes: bytes, file_name: str | None = No
     upload_result = cloudinary.uploader.upload(
         BytesIO(image_bytes),
         public_id=file_name or None,
-        resource_type="image",
+        resource_type="auto",
         unique_filename=True,
         overwrite=False,
     )
@@ -189,9 +190,34 @@ def get_picture_by_id(db: Session, picture_id: UUID) -> Picture | None:
     return db.query(Picture).filter(Picture.id == picture_id).first()
 
 
-def get_all_pictures(db: Session, skip: int = 0, limit: int = 100) -> list[Picture]:
-    """Get all pictures."""
-    return db.query(Picture).offset(skip).limit(limit).all()
+def get_all_pictures(
+    db: Session,
+    skip: int = 0,
+    limit: int = 100,
+    search: str | None = None,
+    gallery_id: UUID | None = None,
+) -> list[Picture]:
+    """Get pictures filtered by caption/gallery, newest first."""
+    query = db.query(Picture)
+    if search:
+        query = query.filter(Picture.caption.ilike(f"%{search}%"))
+    if gallery_id:
+        query = query.filter(Picture.gallery_id == gallery_id)
+    return query.order_by(Picture.uploaded_at.desc(), Picture.id.desc()).offset(skip).limit(limit).all()
+
+
+def count_pictures(
+    db: Session,
+    search: str | None = None,
+    gallery_id: UUID | None = None,
+) -> int:
+    """Count pictures using the same filters as the paginated list."""
+    query = db.query(func.count(Picture.id))
+    if search:
+        query = query.filter(Picture.caption.ilike(f"%{search}%"))
+    if gallery_id:
+        query = query.filter(Picture.gallery_id == gallery_id)
+    return query.scalar() or 0
 
 
 def get_pictures_by_gallery(db: Session, gallery_id: UUID) -> list[Picture]:

@@ -47,6 +47,10 @@ class Gallery(Base):
         cascade="all, delete-orphan",
     )
 
+    @property
+    def picture_count(self) -> int:
+        return len(self.pictures)
+
 
 class Picture(Base):
     """A photo stored within a gallery."""

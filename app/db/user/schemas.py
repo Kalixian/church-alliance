@@ -42,3 +42,10 @@ class UserResponse(UserBase):
 class UserInDB(UserResponse):
     """Full user schema from database"""
     pass
+
+
+def mask_last_name(user: UserResponse) -> UserResponse:
+    """Return a user response with only the last-name initial exposed."""
+    if user.last_name:
+        user.last_name = f"{user.last_name[0]}."
+    return user

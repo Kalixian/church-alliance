@@ -20,6 +20,7 @@ from app.db.user import (
     delete_user,
 )
 from app.db.user.models import UserRole
+from app.db.user.schemas import mask_last_name
 from uuid import UUID
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -129,4 +130,5 @@ def get_user(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
-    return user
+    response = UserResponse.model_validate(user)
+    return mask_last_name(response) if current_user.role == UserRole.APPLICANT else response

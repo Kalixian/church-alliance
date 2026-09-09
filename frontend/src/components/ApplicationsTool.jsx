@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-const roles = ['member', 'organizer', 'administrator']
+const roles = ['member', 'coordinator', 'administrator']
 const pageSize = 10
 
 function ApplicationsTool({ token, authUserId, apiBaseUrl, onBack }) {
@@ -125,7 +125,7 @@ function ApplicationsTool({ token, authUserId, apiBaseUrl, onBack }) {
       <div className="tool-header">
         <div>
           <button type="button" className="text-button" onClick={onBack}>
-            Back to management
+            Back to Admin
           </button>
           <h3>Site Access Applications</h3>
         </div>

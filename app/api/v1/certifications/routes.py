@@ -13,6 +13,7 @@ from app.db.certification import (
     create_certification,
     get_certification_by_id,
     get_all_certifications,
+    get_certification_count,
     update_certification,
     delete_certification,
     get_users_by_certification,
@@ -20,11 +21,13 @@ from app.db.certification import (
 
 router = APIRouter(prefix="/certifications", tags=["certifications"])
 
+certification_managers = allow_roles(UserRole.ADMINISTRATOR, UserRole.COORDINATOR)
+
 
 @router.post("", response_model=CertificationResponse)
 def create_certification_route(
     certification: CertificationCreate,
-    current_user: Annotated[UserResponse, Depends(allow_roles(UserRole.ADMINISTRATOR))],
+    current_user: Annotated[UserResponse, Depends(certification_managers)],
     db: Session = Depends(get_db),
 ):
     """Create a new certification (admin-only)"""
@@ -33,8 +36,19 @@ def create_certification_route(
 
 
 @router.get("", response_model=list[CertificationResponse])
-def list_certifications(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+def list_certifications(
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+):
     return get_all_certifications(db, skip=skip, limit=limit)
+
+
+@router.get("/count", response_model=int)
+def count_certifications(
+    db: Session = Depends(get_db),
+):
+    return get_certification_count(db)
 
 
 @router.get("/{cert_id}", response_model=CertificationResponse)
@@ -53,7 +67,7 @@ def get_cert(cert_id: str, db: Session = Depends(get_db)):
 def update_cert(
     cert_id: str,
     cert_update: CertificationUpdate,
-    current_user: Annotated[UserResponse, Depends(allow_roles(UserRole.ADMINISTRATOR))],
+    current_user: Annotated[UserResponse, Depends(certification_managers)],
     db: Session = Depends(get_db),
 ):
     try:
@@ -69,7 +83,7 @@ def update_cert(
 @router.delete("/{cert_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_cert_route(
     cert_id: str,
-    current_user: Annotated[UserResponse, Depends(allow_roles(UserRole.ADMINISTRATOR))],
+    current_user: Annotated[UserResponse, Depends(certification_managers)],
     db: Session = Depends(get_db),
 ):
     try:

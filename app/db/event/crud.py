@@ -1,20 +1,25 @@
 """CRUD operations for Event model"""
 
+from datetime import datetime, timezone
+
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
-from app.db.event.models import Event
+from app.db.event.models import Event, event_members
 from app.db.event.schemas import EventCreate, EventUpdate
 from app.db.user.crud import get_user_by_id
 from uuid import UUID
 
 
-def create_event(db: Session, event: EventCreate, organizer_id: UUID) -> Event:
+def create_event(db: Session, event: EventCreate, coordinator_id: UUID) -> Event:
     """Create a new event"""
     db_event = Event(
         name=event.name,
         description=event.description,
         start_datetime=event.start_datetime,
         end_datetime=event.end_datetime,
-        organizer_id=organizer_id,
+        all_day=event.all_day,
+        certification_id=event.certification_id,
+        coordinator_id=event.coordinator_id or coordinator_id,
     )
     db.add(db_event)
     db.commit()
@@ -32,9 +37,58 @@ def get_all_events(db: Session, skip: int = 0, limit: int = 100) -> list[Event]:
     return db.query(Event).offset(skip).limit(limit).all()
 
 
-def get_events_by_organizer(db: Session, organizer_id: UUID) -> list[Event]:
+def _event_filter_query(db: Session, search: str | None = None, certification_id: UUID | None = None, include_all: bool = False):
+    query = db.query(Event)
+    if not include_all:
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        today = now.date().isoformat()
+        query = query.filter(or_(
+            Event.all_day.is_(True) & (func.date(Event.end_datetime) >= today),
+            Event.all_day.is_(False) & (Event.end_datetime >= now),
+        ))
+    if search:
+        query = query.filter(Event.name.ilike(f"%{search.strip()}%"))
+    if certification_id is not None:
+        query = query.filter(Event.certification_id == certification_id)
+    return query
+
+
+def get_upcoming_events(
+    db: Session,
+    skip: int = 0,
+    limit: int = 10,
+    search: str | None = None,
+    certification_id: UUID | None = None,
+    include_all: bool = False,
+) -> list[Event]:
+    """Get filtered events ordered by start date."""
+    return (
+        _event_filter_query(db, search=search, certification_id=certification_id, include_all=include_all)
+        .order_by(Event.start_datetime.asc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+
+
+def get_upcoming_event_count(
+    db: Session,
+    search: str | None = None,
+    certification_id: UUID | None = None,
+    include_all: bool = False,
+) -> int:
+    """Count filtered events."""
+    return _event_filter_query(
+        db,
+        search=search,
+        certification_id=certification_id,
+        include_all=include_all,
+    ).count()
+
+
+def get_events_by_coordinator(db: Session, coordinator_id: UUID) -> list[Event]:
     """Get all events organized by a specific user"""
-    return db.query(Event).filter(Event.organizer_id == organizer_id).all()
+    return db.query(Event).filter(Event.coordinator_id == coordinator_id).all()
 
 
 def update_event(db: Session, event_id: UUID, event_update: EventUpdate) -> Event | None:
@@ -51,6 +105,12 @@ def update_event(db: Session, event_id: UUID, event_update: EventUpdate) -> Even
         db_event.start_datetime = event_update.start_datetime
     if event_update.end_datetime:
         db_event.end_datetime = event_update.end_datetime
+    if event_update.all_day is not None:
+        db_event.all_day = event_update.all_day
+    if event_update.certification_id is not None:
+        db_event.certification_id = event_update.certification_id
+    if event_update.coordinator_id is not None:
+        db_event.coordinator_id = event_update.coordinator_id
     
     db.commit()
     db.refresh(db_event)

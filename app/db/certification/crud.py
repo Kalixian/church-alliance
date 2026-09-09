@@ -30,7 +30,12 @@ def get_certification_by_name(db: Session, name: str) -> Certification | None:
 
 def get_all_certifications(db: Session, skip: int = 0, limit: int = 100) -> list[Certification]:
     """Get all certifications."""
-    return db.query(Certification).offset(skip).limit(limit).all()
+    return db.query(Certification).order_by(Certification.name.asc()).offset(skip).limit(limit).all()
+
+
+def get_certification_count(db: Session) -> int:
+    """Get the total number of certifications."""
+    return db.query(Certification).count()
 
 
 def update_certification(db: Session, certification_id: UUID, name: str | None = None, description: str | None = None) -> Certification | None:

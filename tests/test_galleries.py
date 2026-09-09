@@ -106,7 +106,7 @@ def test_move_pictures_route_moves_all_pictures_between_galleries(client, db_ses
         UserCreate(
             auth_id="gallery-mover",
             email="gallery-mover@example.com",
-            role=UserRole.ORGANIZER,
+            role=UserRole.COORDINATOR,
         ),
     )
     token = make_token("gallery-mover", "gallery-mover@example.com", settings.supabase_jwt_secret)

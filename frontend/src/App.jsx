@@ -4,10 +4,10 @@ import './App.css'
 import AuthModal from './components/AuthModal'
 import MainContent from './components/MainContent'
 
-const quickLinks = ['Volunteer', 'Events', 'Resources', 'News']
-const managementRoles = new Set(['administrator', 'organizer'])
+const quickLinks = ['Home', 'About Us', 'Calendar', 'Events', 'Members', 'News', 'Gallery']
+const managementRoles = new Set(['administrator', 'coordinator'])
 
-const getApiBaseUrl = () => import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const getApiBaseUrl = () => import.meta.env.VITE_API_URL
 
 const getSupabaseClient = () => {
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
@@ -35,7 +35,8 @@ function App() {
   const [apiMessage, setApiMessage] = useState('')
   const [authNotice, setAuthNotice] = useState('')
   const [userRole, setUserRole] = useState('')
-  const [activeSection, setActiveSection] = useState('Volunteer')
+  const [backendUserId, setBackendUserId] = useState('')
+  const [activeSection, setActiveSection] = useState('Home')
 
   useEffect(() => {
     const client = getSupabaseClient()
@@ -50,10 +51,10 @@ function App() {
         setSession(nextSession)
         const nextToken = nextSession?.access_token
         if (nextToken) {
-          const role = await fetchUserRole(nextToken)
-          setUserRole(role)
+          await fetchUserRole(nextToken)
         } else {
           setUserRole('')
+          setBackendUserId('')
         }
       },
     )
@@ -61,8 +62,7 @@ function App() {
     client.auth.getSession().then(async ({ data: { session: currentSession } }) => {
       setSession(currentSession)
       if (currentSession?.access_token) {
-        const role = await fetchUserRole(currentSession.access_token)
-        setUserRole(role)
+        await fetchUserRole(currentSession.access_token)
       }
     })
 
@@ -74,17 +74,17 @@ function App() {
     [session],
   )
 
-  const visibleQuickLinks = managementRoles.has(userRole)
-    ? [...quickLinks, 'Management']
-    : quickLinks
-  const allowedActiveSections = [
-    ...visibleQuickLinks,
-    'Members',
-    ...(userRole === 'administrator' ? ['Site Access Applications'] : []),
-  ]
+  const visibleQuickLinks = session && userRole !== 'applicant'
+    ? managementRoles.has(userRole) ? [...quickLinks, 'Admin'] : quickLinks
+    : quickLinks.filter((link) => link !== 'Members')
+  const allowedActiveSections = userRole === 'administrator'
+    ? [...visibleQuickLinks, 'Site Access Applications', 'Certifications']
+    : ['administrator', 'coordinator'].includes(userRole)
+      ? [...visibleQuickLinks, 'Certifications']
+    : visibleQuickLinks
   const visibleActiveSection = allowedActiveSections.includes(activeSection)
     ? activeSection
-    : 'Volunteer'
+    : 'Home'
 
   const fetchUserRole = async (token) => {
     if (!token) {
@@ -104,7 +104,9 @@ function App() {
     }
 
     const user = await syncResponse.json().catch(() => ({}))
-    return user.role || ''
+    setUserRole(user.role || '')
+    setBackendUserId(user.id || '')
+    return user
   }
 
   const resetAuthForm = () => {
@@ -160,6 +162,7 @@ function App() {
       const backendUser = await syncResponse.json().catch(() => ({}))
       setSession(data.session)
       setUserRole(backendUser.role || '')
+      setBackendUserId(backendUser.id || '')
       setIsLoginOpen(false)
       setShowSignupForm(false)
       resetAuthForm()
@@ -241,6 +244,7 @@ function App() {
     await supabaseClient.auth.signOut()
     setSession(null)
     setUserRole('')
+    setBackendUserId('')
     setApiMessage('Logged out successfully.')
   }
 
@@ -248,7 +252,7 @@ function App() {
     <div className="page-shell">
       <header className="topbar">
         <div className="brand-block">
-          <span className="eyebrow">Church alliance</span>
+          <span className="eyebrow">Church Alliance for Disaster Response</span>
           <h1>Welcome</h1>
         </div>
 
@@ -272,8 +276,8 @@ function App() {
       <main className="content-column">
         <section className="banner-block" aria-label="Featured banner">
           <div className="banner-overlay">
-            <p className="banner-kicker">Featured update</p>
-            <h2>Community rooted in faith and service</h2>
+            <p className="banner-kicker">Temporary Styling</p>
+            <h2>Hope In Disaster</h2>
           </div>
         </section>
 
@@ -297,11 +301,12 @@ function App() {
           activeSection={visibleActiveSection}
           authToken={session?.access_token}
           authUserId={session?.user?.id}
+          backendUserId={backendUserId}
           apiBaseUrl={getApiBaseUrl()}
           userRole={userRole}
-          onSelectMembers={() => setActiveSection('Members')}
           onSelectApplications={() => setActiveSection('Site Access Applications')}
-          onBackToManagement={() => setActiveSection('Management')}
+          onSelectCertifications={() => setActiveSection('Certifications')}
+          onBackToManagement={() => setActiveSection('Admin')}
         />
       </main>
 

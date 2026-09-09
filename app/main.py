@@ -8,6 +8,7 @@ from app.api.v1.certifications import router as certifications_router
 from app.api.v1.assets import router as assets_router
 from app.api.v1.galleries import router as galleries_router, pictures_router
 from app.api.v1.users import router as users_router
+from app.api.v1.articles import router as articles_router
 
 
 @asynccontextmanager
@@ -23,13 +24,20 @@ app.add_middleware(
     allow_origins=[
         'http://localhost:5173',
         'http://127.0.0.1:5173',
+        'http://192.168.4.84:5173',
         'http://localhost:3000',
         'http://127.0.0.1:3000',
+        'http://192.168.4.84:5173',
+        'http://church-alliance.com',
+        'http://newton.jpoley.com:5173',
+        'http://newton.jpoley.com:8000'
     ],
     allow_credentials=True,
     allow_methods=['*'],
     allow_headers=['*'],
+    expose_headers=['X-Total-Count'],
 )
+
 
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(events_router, prefix="/api/v1")
@@ -38,6 +46,7 @@ app.include_router(assets_router, prefix="/api/v1")
 app.include_router(galleries_router, prefix="/api/v1")
 app.include_router(pictures_router, prefix="/api/v1")
 app.include_router(users_router, prefix="/api/v1")
+app.include_router(articles_router, prefix="/api/v1")
 
 @app.get("/")
 def main():

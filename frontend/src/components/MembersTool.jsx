@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 
-const roles = ['member', 'organizer', 'administrator']
+const roles = ['member', 'coordinator', 'administrator']
 const pageSize = 10
 
-function MembersTool({ token, authUserId, apiBaseUrl, canEditRoles, onBack }) {
+function MembersTool({ token, authUserId, apiBaseUrl, canEditRoles }) {
   const columnCount = canEditRoles ? 5 : 4
   const [users, setUsers] = useState([])
   const [totalUsers, setTotalUsers] = useState(0)
@@ -126,10 +126,8 @@ function MembersTool({ token, authUserId, apiBaseUrl, canEditRoles, onBack }) {
     <article className="members-tool content-block">
       <div className="tool-header">
         <div>
-          <button type="button" className="text-button" onClick={onBack}>
-            Back to management
-          </button>
           <h3>Members</h3>
+          <p>Additional control for church membership, certifications, experience, assets, and notes will be added. Users wil be able to update their own info but not others, unless admin.</p>
         </div>
         <span className="tool-count">{totalUsers} members</span>
       </div>

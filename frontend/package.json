@@ -11,8 +11,12 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.109.0",
+    "dompurify": "^3.4.15",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "slate": "^0.126.2",
+    "slate-history": "^0.113.1",
+    "slate-react": "^0.126.4"
   },
   "devDependencies": {
     "@types/react": "^19.2.18",

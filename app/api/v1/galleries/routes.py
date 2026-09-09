@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.api.v1.auth.dependencies import get_current_user
@@ -9,6 +9,7 @@ from app.db.database import get_db
 from app.db.gallery.crud import (
     create_gallery,
     create_picture,
+    count_pictures,
     delete_gallery,
     delete_picture,
     get_all_galleries,
@@ -40,8 +41,8 @@ def create_gallery_route(
     current_user: Annotated[UserResponse, Depends(get_current_user)],
     db: Session = Depends(get_db),
 ):
-    if current_user.role not in {UserRole.ADMINISTRATOR, UserRole.ORGANIZER}:
-        raise HTTPException(status_code=403, detail="Only organizers and administrators can manage galleries")
+    if current_user.role not in {UserRole.ADMINISTRATOR, UserRole.COORDINATOR}:
+        raise HTTPException(status_code=403, detail="Only coordinators and administrators can manage galleries")
 
     existing = create_gallery(db, gallery.name)
     if existing is None:
@@ -74,8 +75,8 @@ def update_gallery_route(
     current_user: Annotated[UserResponse, Depends(get_current_user)],
     db: Session = Depends(get_db),
 ):
-    if current_user.role not in {UserRole.ADMINISTRATOR, UserRole.ORGANIZER}:
-        raise HTTPException(status_code=403, detail="Only organizers and administrators can manage galleries")
+    if current_user.role not in {UserRole.ADMINISTRATOR, UserRole.COORDINATOR}:
+        raise HTTPException(status_code=403, detail="Only coordinators and administrators can manage galleries")
 
     try:
         gallery_uuid = UUID(gallery_id)
@@ -94,8 +95,8 @@ def delete_gallery_route(
     current_user: Annotated[UserResponse, Depends(get_current_user)],
     db: Session = Depends(get_db),
 ):
-    if current_user.role not in {UserRole.ADMINISTRATOR, UserRole.ORGANIZER}:
-        raise HTTPException(status_code=403, detail="Only organizers and administrators can manage galleries")
+    if current_user.role not in {UserRole.ADMINISTRATOR, UserRole.COORDINATOR}:
+        raise HTTPException(status_code=403, detail="Only coordinators and administrators can manage galleries")
 
     try:
         gallery_uuid = UUID(gallery_id)
@@ -126,8 +127,8 @@ def move_gallery_pictures_route(
     current_user: Annotated[UserResponse, Depends(get_current_user)],
     db: Session = Depends(get_db),
 ):
-    if current_user.role not in {UserRole.ADMINISTRATOR, UserRole.ORGANIZER}:
-        raise HTTPException(status_code=403, detail="Only organizers and administrators can move galleries")
+    if current_user.role not in {UserRole.ADMINISTRATOR, UserRole.COORDINATOR}:
+        raise HTTPException(status_code=403, detail="Only coordinators and administrators can move galleries")
 
     try:
         source_uuid = UUID(source_gallery_id)
@@ -160,22 +161,40 @@ def create_picture_route(
             raise HTTPException(status_code=400, detail="Invalid gallery ID")
 
     image_bytes = image.file.read()
-    db_picture = create_picture(
-        db,
-        caption=caption,
-        gallery_id=resolved_gallery_id,
-        uploaded_by_id=current_user.id,
-        image_bytes=image_bytes,
-        file_name=image.filename,
-    )
+    try:
+        db_picture = create_picture(
+            db,
+            caption=caption,
+            gallery_id=resolved_gallery_id,
+            uploaded_by_id=current_user.id,
+            image_bytes=image_bytes,
+            file_name=image.filename,
+        )
+    except ValueError as upload_error:
+        raise HTTPException(status_code=503, detail=str(upload_error)) from upload_error
     if not db_picture:
         raise HTTPException(status_code=404, detail="Gallery not found")
     return db_picture
 
 
 @pictures_router.get("", response_model=list[PictureResponse])
-def list_pictures(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    return get_all_pictures(db, skip=skip, limit=limit)
+def list_pictures(
+    response: Response,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(24, ge=1, le=100),
+    search: str | None = Query(None, alias="q"),
+    gallery_id: str | None = Query(None),
+    db: Session = Depends(get_db),
+):
+    resolved_gallery_id = None
+    if gallery_id:
+        try:
+            resolved_gallery_id = UUID(gallery_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid gallery ID")
+
+    response.headers["X-Total-Count"] = str(count_pictures(db, search=search, gallery_id=resolved_gallery_id))
+    return get_all_pictures(db, skip=skip, limit=limit, search=search, gallery_id=resolved_gallery_id)
 
 
 @pictures_router.get("/{picture_id}", response_model=PictureResponse)
@@ -207,10 +226,10 @@ def update_picture_route(
     if not picture:
         raise HTTPException(status_code=404, detail="Picture not found")
 
-    if picture_update.gallery_id is not None and current_user.role not in {UserRole.ADMINISTRATOR, UserRole.ORGANIZER}:
-        raise HTTPException(status_code=403, detail="Only organizers and administrators can change a picture's gallery")
+    if picture_update.gallery_id is not None and current_user.role not in {UserRole.ADMINISTRATOR, UserRole.COORDINATOR}:
+        raise HTTPException(status_code=403, detail="Only coordinators and administrators can change a picture's gallery")
 
-    if current_user.role not in {UserRole.ADMINISTRATOR, UserRole.ORGANIZER} and picture.uploaded_by_id != current_user.id:
+    if current_user.role not in {UserRole.ADMINISTRATOR, UserRole.COORDINATOR} and picture.uploaded_by_id != current_user.id:
         raise HTTPException(status_code=403, detail="You can only update your own pictures")
 
     updated_picture = update_picture(
@@ -240,7 +259,7 @@ def delete_picture_route(
     if not picture:
         raise HTTPException(status_code=404, detail="Picture not found")
 
-    if current_user.role not in {UserRole.ADMINISTRATOR, UserRole.ORGANIZER} and picture.uploaded_by_id != current_user.id:
+    if current_user.role not in {UserRole.ADMINISTRATOR, UserRole.COORDINATOR} and picture.uploaded_by_id != current_user.id:
         raise HTTPException(status_code=403, detail="You can only delete pictures you uploaded")
 
     success = delete_picture(db, picture_uuid)

@@ -133,20 +133,20 @@ def test_admin_can_update_user_role(client, db_session):
 
     response = client.patch(
         f"/api/v1/users/{member.id}/role",
-        params={"new_role": UserRole.ORGANIZER.value},
+        params={"new_role": UserRole.COORDINATOR.value},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
 
     assert response.status_code == 200
-    assert response.json()["role"] == UserRole.ORGANIZER.value
+    assert response.json()["role"] == UserRole.COORDINATOR.value
 
 
-def test_organizer_cannot_update_user_role(client, db_session):
-    organizer = create_user(
+def test_coordinator_cannot_update_user_role(client, db_session):
+    coordinator = create_user(
         db_session,
         UserCreate(
-            auth_id="role-organizer",
-            email="role-organizer@example.com",
+            auth_id="role-coordinator",
+            email="role-coordinator@example.com",
         ),
     )
     member = create_user(
@@ -156,13 +156,13 @@ def test_organizer_cannot_update_user_role(client, db_session):
             email="role-member-denied@example.com",
         ),
     )
-    update_user(db_session, organizer.id, UserUpdate(role=UserRole.ORGANIZER))
-    organizer_token = make_token("role-organizer", organizer.email, settings.supabase_jwt_secret)
+    update_user(db_session, coordinator.id, UserUpdate(role=UserRole.COORDINATOR))
+    coordinator_token = make_token("role-coordinator", coordinator.email, settings.supabase_jwt_secret)
 
     response = client.patch(
         f"/api/v1/users/{member.id}/role",
         params={"new_role": UserRole.MEMBER.value},
-        headers={"Authorization": f"Bearer {organizer_token}"},
+        headers={"Authorization": f"Bearer {coordinator_token}"},
     )
 
     assert response.status_code == 403
@@ -274,3 +274,27 @@ def test_admin_can_list_only_applicant_users(client, db_session):
     assert [user["auth_id"] for user in response.json()] == ["application-list-applicant"]
     assert count_response.status_code == 200
     assert count_response.json() == 1
+
+
+def test_applicant_cannot_list_members(client, db_session):
+    applicant = create_user(
+        db_session,
+        UserCreate(
+            auth_id="member-list-applicant",
+            email="member-list-applicant@example.com",
+        ),
+    )
+    update_user(db_session, applicant.id, UserUpdate(role=UserRole.APPLICANT))
+    applicant_token = make_token("member-list-applicant", applicant.email, settings.supabase_jwt_secret)
+
+    response = client.get(
+        "/api/v1/users",
+        headers={"Authorization": f"Bearer {applicant_token}"},
+    )
+    count_response = client.get(
+        "/api/v1/users/count",
+        headers={"Authorization": f"Bearer {applicant_token}"},
+    )
+
+    assert response.status_code == 403
+    assert count_response.status_code == 403

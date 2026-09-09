@@ -5,6 +5,7 @@ from app.db.event import Event, event_members
 from app.db.certification import Certification, user_certifications
 from app.db.asset import Asset, user_assets
 from app.db.gallery import Gallery, Picture
+from app.db.article import Article
 
 __all__ = [
     "User",
@@ -17,6 +18,7 @@ __all__ = [
     "user_assets",
     "Gallery",
     "Picture",
+    "Article",
 ]
 
 
