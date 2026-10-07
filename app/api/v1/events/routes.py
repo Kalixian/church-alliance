@@ -2,7 +2,14 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.api.v1.auth.dependencies import allow_roles, get_current_user, get_optional_current_user
+from app.api.v1.auth.dependencies import (
+    MANAGER_ROLES,
+    ensure_owner_or_role,
+    get_current_user,
+    get_optional_current_user,
+    require_confirmed,
+    require_manager,
+)
 from app.db.database import get_db
 from app.db.user import UserResponse, UserRole, get_user_by_id
 from app.db.event import (
@@ -24,6 +31,8 @@ from app.db.event import (
 )
 
 router = APIRouter(prefix="/events", tags=["events"])
+
+ADMIN_ONLY = frozenset({UserRole.ADMINISTRATOR})
 
 
 def _mask_user_names(user: UserResponse | None):
@@ -56,14 +65,14 @@ def create_event_route(
     event: EventCreate,
     current_user: Annotated[
         UserResponse,
-        Depends(allow_roles(UserRole.ADMINISTRATOR, UserRole.COORDINATOR)),
+        Depends(require_manager()),
     ],
     db: Session = Depends(get_db),
 ):
     """Create an event for the current or selected qualified coordinator."""
     coordinator_id = event.coordinator_id or current_user.id
     coordinator = get_user_by_id(db, coordinator_id)
-    if not coordinator or coordinator.role not in {UserRole.ADMINISTRATOR, UserRole.COORDINATOR}:
+    if not coordinator or coordinator.role not in MANAGER_ROLES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Events can only be assigned to coordinators or administrators",
@@ -162,15 +171,16 @@ def update_event_route(
     if not db_event:
         raise HTTPException(status_code=404, detail="Event not found")
     
-    if current_user.role != UserRole.ADMINISTRATOR and db_event.coordinator_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only an administrator or the event coordinator can update this event",
-        )
+    ensure_owner_or_role(
+        current_user,
+        db_event.coordinator_id,
+        "Only an administrator or the event coordinator can update this event",
+        roles=ADMIN_ONLY,
+    )
 
     if event_update.coordinator_id is not None:
         coordinator = get_user_by_id(db, event_update.coordinator_id)
-        if not coordinator or coordinator.role not in {UserRole.ADMINISTRATOR, UserRole.COORDINATOR}:
+        if not coordinator or coordinator.role not in MANAGER_ROLES:
             raise HTTPException(status_code=400, detail="Events can only be assigned to coordinators or administrators")
     
     updated_event = update_event(db, event_uuid, event_update)
@@ -194,11 +204,12 @@ def delete_event_route(
     if not db_event:
         raise HTTPException(status_code=404, detail="Event not found")
     
-    if current_user.role != UserRole.ADMINISTRATOR and db_event.coordinator_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only an administrator or the event coordinator can delete this event",
-        )
+    ensure_owner_or_role(
+        current_user,
+        db_event.coordinator_id,
+        "Only an administrator or the event coordinator can delete this event",
+        roles=ADMIN_ONLY,
+    )
     
     delete_event(db, event_uuid)
     return None
@@ -208,7 +219,7 @@ def delete_event_route(
 def add_event_member(
     event_id: str,
     user_id: str,
-    current_user: Annotated[UserResponse, Depends(get_current_user)],
+    current_user: Annotated[UserResponse, Depends(require_confirmed("Applicants cannot register for events"))],
     db: Session = Depends(get_db),
 ):
     """Add a user as a member to an event"""
@@ -223,9 +234,6 @@ def add_event_member(
     if not db_event:
         raise HTTPException(status_code=404, detail="Event not found")
     
-    if current_user.role == UserRole.APPLICANT:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Applicants cannot register for events")
-
     # Allow coordinator/admin or the user themselves to add members
     if db_event.coordinator_id != current_user.id and member_uuid != current_user.id:
         raise HTTPException(
@@ -243,12 +251,10 @@ def add_event_member(
 @router.post("/{event_id}/register", status_code=status.HTTP_204_NO_CONTENT)
 def register_for_event(
     event_id: str,
-    current_user: Annotated[UserResponse, Depends(get_current_user)],
+    current_user: Annotated[UserResponse, Depends(require_confirmed("Applicants cannot register for events"))],
     db: Session = Depends(get_db),
 ):
     """Register the current non-applicant user for an event."""
-    if current_user.role == UserRole.APPLICANT:
-        raise HTTPException(status_code=403, detail="Applicants cannot register for events")
     try:
         from uuid import UUID
         event_uuid = UUID(event_id)
@@ -263,12 +269,10 @@ def register_for_event(
 @router.delete("/{event_id}/register", status_code=status.HTTP_204_NO_CONTENT)
 def deregister_from_event(
     event_id: str,
-    current_user: Annotated[UserResponse, Depends(get_current_user)],
+    current_user: Annotated[UserResponse, Depends(require_confirmed("Applicants cannot deregister from events"))],
     db: Session = Depends(get_db),
 ):
     """Deregister the current non-applicant user from an event."""
-    if current_user.role == UserRole.APPLICANT:
-        raise HTTPException(status_code=403, detail="Applicants cannot deregister from events")
     try:
         from uuid import UUID
         event_uuid = UUID(event_id)
@@ -284,7 +288,7 @@ def deregister_from_event(
 def remove_event_member(
     event_id: str,
     user_id: str,
-    current_user: Annotated[UserResponse, Depends(get_current_user)],
+    current_user: Annotated[UserResponse, Depends(require_confirmed("Applicants cannot deregister from events"))],
     db: Session = Depends(get_db),
 ):
     """Remove a user from an event"""
@@ -299,9 +303,6 @@ def remove_event_member(
     if not db_event:
         raise HTTPException(status_code=404, detail="Event not found")
     
-    if current_user.role == UserRole.APPLICANT:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Applicants cannot deregister from events")
-
     # Allow coordinator/admin or the user themselves to remove members
     if db_event.coordinator_id != current_user.id and member_uuid != current_user.id:
         raise HTTPException(

@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, timezone
-from jose import jwt
+import jwt
 
 from app.config import settings
 from app.db.user import create_user, get_user_by_auth_id, update_user, UserCreate, UserRole, UserUpdate
@@ -16,23 +16,23 @@ def make_token(sub: str, email: str, secret: str) -> str:
     return jwt.encode(payload, secret, algorithm=settings.jwt_algorithm)
 
 
-def test_me_without_token(client):
-    response = client.get("/api/v1/auth/me")
+def test_sync_user_without_token(client):
+    response = client.post("/api/v1/auth/sync-user")
     assert response.status_code == 401
 
 
-def test_me_with_invalid_token(client):
-    response = client.get(
-        "/api/v1/auth/me",
+def test_sync_user_with_invalid_token(client):
+    response = client.post(
+        "/api/v1/auth/sync-user",
         headers={"Authorization": "Bearer invalid.token.here"},
     )
     assert response.status_code == 401
 
 
-def test_me_creates_user_and_returns_profile(client):
+def test_sync_user_creates_user_and_returns_profile(client):
     token = make_token("test-user-1", "test1@example.com", settings.supabase_jwt_secret)
-    response = client.get(
-        "/api/v1/auth/me",
+    response = client.post(
+        "/api/v1/auth/sync-user",
         headers={"Authorization": f"Bearer {token}"},
     )
     assert response.status_code == 200
@@ -53,7 +53,7 @@ def test_sync_user_returns_same_profile(client):
     assert user_data["email"] == "test2@example.com"
 
 
-def test_me_updates_user_email_when_token_email_changes(client, db_session):
+def test_sync_user_updates_email_when_token_email_changes(client, db_session):
     create_user(
         db_session,
         UserCreate(
@@ -64,8 +64,8 @@ def test_me_updates_user_email_when_token_email_changes(client, db_session):
     )
 
     token = make_token("user-email-update", "new@example.com", settings.supabase_jwt_secret)
-    response = client.get(
-        "/api/v1/auth/me",
+    response = client.post(
+        "/api/v1/auth/sync-user",
         headers={"Authorization": f"Bearer {token}"},
     )
 
@@ -86,12 +86,85 @@ def test_admin_route_denies_non_admin(client, db_session):
             email="existing-admin@example.com",
         ),
     )
+    create_user(db_session, UserCreate(auth_id="non-admin", email="user@example.com"))
     token = make_token("non-admin", "user@example.com", settings.supabase_jwt_secret)
     response = client.get(
         "/api/v1/auth/admin-only",
         headers={"Authorization": f"Bearer {token}"},
     )
     assert response.status_code == 403
+
+
+def test_protected_route_rejects_unsynced_user(client, db_session):
+    token = make_token("never-synced", "never-synced@example.com", settings.supabase_jwt_secret)
+    response = client.get(
+        "/api/v1/auth/admin-only",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 401
+    assert get_user_by_auth_id(db_session, "never-synced") is None
+
+
+def test_protected_route_does_not_update_user_from_token(client, db_session):
+    create_user(
+        db_session,
+        UserCreate(auth_id="read-only-admin", email="before@example.com", role=UserRole.ADMINISTRATOR),
+    )
+    token = make_token("read-only-admin", "after@example.com", settings.supabase_jwt_secret)
+    response = client.get(
+        "/api/v1/auth/admin-only",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert get_user_by_auth_id(db_session, "read-only-admin").email == "before@example.com"
+
+
+def test_es256_tokens_verify_against_cached_jwks(client, db_session, monkeypatch):
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from jwt import PyJWKClient
+    from jwt.algorithms import ECAlgorithm
+    from app.api.v1.auth import dependencies
+
+    supabase_url = "https://example.supabase.co"
+    private_key = ec.generate_private_key(ec.SECP256R1())
+    public_jwk = ECAlgorithm.to_jwk(private_key.public_key(), as_dict=True)
+    public_jwk.update({"kid": "test-key", "use": "sig", "alg": "ES256"})
+
+    fetches = []
+
+    def fake_fetch_data(self):
+        fetches.append(self.uri)
+        return {"keys": [public_jwk]}
+
+    monkeypatch.setattr(settings, "supabase_url", supabase_url)
+    monkeypatch.setattr(PyJWKClient, "fetch_data", fake_fetch_data)
+    dependencies._jwks_client.cache_clear()
+
+    now = datetime.now(timezone.utc)
+    token = jwt.encode(
+        {
+            "sub": "es256-user",
+            "email": "es256@example.com",
+            "aud": "authenticated",
+            "iss": f"{supabase_url}/auth/v1",
+            "iat": now,
+            "exp": now + timedelta(hours=1),
+        },
+        private_key,
+        algorithm="ES256",
+        headers={"kid": "test-key"},
+    )
+
+    first = client.post("/api/v1/auth/sync-user", headers={"Authorization": f"Bearer {token}"})
+    second = client.post("/api/v1/auth/sync-user", headers={"Authorization": f"Bearer {token}"})
+    dependencies._jwks_client.cache_clear()
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json()["auth_id"] == "es256-user"
+    assert fetches == [f"{supabase_url}/auth/v1/.well-known/jwks.json"]
 
 
 def test_admin_route_allows_admin(client, db_session):

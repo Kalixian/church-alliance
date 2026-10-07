@@ -1,6 +1,6 @@
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
-from app.api.v1.auth.dependencies import allow_roles, disallowed_roles, get_current_user
+from app.api.v1.auth.dependencies import allow_roles, get_current_user, require_confirmed
 from app.db.database import get_db
 from sqlalchemy.orm import Session
 
@@ -80,7 +80,7 @@ def list_user_roles(
 
 @router.get("/count", response_model=int)
 def count_users(
-    user: Annotated[UserResponse, Depends(disallowed_roles(UserRole.APPLICANT))],
+    user: Annotated[UserResponse, Depends(require_confirmed())],
     role: UserRole | None = None,
     exclude_role: UserRole | None = None,
     db: Session = Depends(get_db),
@@ -91,7 +91,7 @@ def count_users(
 
 @router.get("", response_model=list[UserResponse])
 def list_users(
-    user: Annotated[UserResponse, Depends(disallowed_roles(UserRole.APPLICANT))],
+    user: Annotated[UserResponse, Depends(require_confirmed())],
     skip: int = 0,
     limit: int = 100,
     sort_by: str = "last_name",

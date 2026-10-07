@@ -1,8 +1,10 @@
+from functools import lru_cache
 from typing import Optional
+from uuid import UUID
+
+import jwt
 from fastapi import Depends, HTTPException, status, Header
-from jose import JWTError, jwt as jose_jwt
-from jwt import PyJWKClient, decode as pyjwt_decode
-from jwt.exceptions import InvalidTokenError, PyJWKClientError
+from jwt import PyJWKClient
 
 from app.config import settings
 from app.db.database import get_db
@@ -18,73 +20,93 @@ from app.db.user import (
 from sqlalchemy.orm import Session
 
 
-def extract_token(authorization: Optional[str] = Header(None)) -> str:
-    credentials_exception = HTTPException(
+MANAGER_ROLES = frozenset({UserRole.ADMINISTRATOR, UserRole.COORDINATOR})
+
+
+def _credentials_exception() -> HTTPException:
+    return HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+
+
+@lru_cache(maxsize=4)
+def _jwks_client(supabase_url: str) -> PyJWKClient:
+    """One client per Supabase project so the fetched JWKS is cached across requests."""
+    return PyJWKClient(f"{supabase_url}/auth/v1/.well-known/jwks.json")
+
+
+def extract_token(authorization: Optional[str] = Header(None)) -> str:
     if not authorization:
-        raise credentials_exception
+        raise _credentials_exception()
 
     parts = authorization.split()
     if len(parts) != 2 or parts[0].lower() != "bearer":
-        raise credentials_exception
+        raise _credentials_exception()
 
     return parts[1]
 
 
-def get_current_user(
-    token: str = Depends(extract_token),
-    db: Session = Depends(get_db),
-) -> UserResponse:
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-
+def decode_token(token: str = Depends(extract_token)) -> dict:
+    """Verify a Supabase access token and return its claims."""
     try:
-        token_header = jose_jwt.get_unverified_header(token)
-        algorithm = token_header.get("alg")
+        algorithm = jwt.get_unverified_header(token).get("alg")
 
         if algorithm == "ES256":
             if not settings.supabase_url:
                 raise HTTPException(status_code=500, detail="Supabase URL not configured")
 
-            jwks_url = f"{settings.supabase_url.rstrip('/')}/auth/v1/.well-known/jwks.json"
-            signing_key = PyJWKClient(jwks_url).get_signing_key_from_jwt(token)
-            payload = pyjwt_decode(
+            supabase_url = settings.supabase_url.rstrip("/")
+            signing_key = _jwks_client(supabase_url).get_signing_key_from_jwt(token)
+            payload = jwt.decode(
                 token,
                 signing_key.key,
                 algorithms=["ES256"],
                 audience="authenticated",
-                issuer=f"{settings.supabase_url.rstrip('/')}/auth/v1",
+                issuer=f"{supabase_url}/auth/v1",
             )
         else:
             secret = settings.supabase_jwt_secret
             if not secret:
                 raise HTTPException(status_code=500, detail="JWT secret not configured")
-            payload = jose_jwt.decode(token, secret, algorithms=[settings.jwt_algorithm])
+            payload = jwt.decode(token, secret, algorithms=[settings.jwt_algorithm])
+    except jwt.PyJWTError:
+        raise _credentials_exception()
 
-        auth_id = payload.get("sub")
-        email = payload.get("email")
-        first_name = payload.get("first_name") or payload.get("user_metadata", {}).get("first_name")
-        last_name = payload.get("last_name") or payload.get("user_metadata", {}).get("last_name")
-        if not auth_id:
-            raise credentials_exception
-    except (JWTError, InvalidTokenError, PyJWKClientError):
-        raise credentials_exception
+    if not payload.get("sub"):
+        raise _credentials_exception()
+    return payload
+
+
+def get_current_user(
+    claims: dict = Depends(decode_token),
+    db: Session = Depends(get_db),
+) -> UserResponse:
+    """Return the local user for a verified token. Read-only: the user must already be synced."""
+    user = get_user_by_auth_id(db, claims["sub"])
+    if not user:
+        raise _credentials_exception()
+    return UserResponse.model_validate(user)
+
+
+def sync_current_user(
+    claims: dict = Depends(decode_token),
+    db: Session = Depends(get_db),
+) -> UserResponse:
+    """Create or refresh the local user from token claims. Only used by POST /auth/sync-user."""
+    auth_id = claims["sub"]
+    email = claims.get("email")
+    metadata = claims.get("user_metadata") or {}
+    first_name = claims.get("first_name") or metadata.get("first_name")
+    last_name = claims.get("last_name") or metadata.get("last_name")
 
     user = get_user_by_auth_id(db, auth_id)
     if not user:
-        user_in = UserCreate(
-            auth_id=auth_id,
-            email=email,
-            first_name=first_name,
-            last_name=last_name,
+        user = create_user(
+            db,
+            UserCreate(auth_id=auth_id, email=email, first_name=first_name, last_name=last_name),
         )
-        user = create_user(db, user_in)
     else:
         if email and user.email != email:
             user = update_user_email(db, user.id, email)
@@ -101,31 +123,57 @@ def get_optional_current_user(
     if not authorization:
         return None
     try:
-        token = extract_token(authorization)
-        return get_current_user(token, db)
+        return get_current_user(decode_token(extract_token(authorization)), db)
     except HTTPException:
         return None
 
 
-def allow_roles(*allowed_roles: UserRole):
+def allow_roles(*allowed_roles: UserRole, detail: str = "Insufficient permissions"):
     """Create a dependency that requires the current user to have one of the allowed roles."""
     def dependency(current_user: UserResponse = Depends(get_current_user)) -> UserResponse:
         if current_user.role not in allowed_roles:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Insufficient permissions",
-            )
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
         return current_user
     return dependency
 
 
-def disallowed_roles(*disallowed_roles: UserRole):
+def disallowed_roles(*disallowed_roles: UserRole, detail: str = "Insufficient permissions"):
     """Create a dependency that requires the current user to NOT have any of the disallowed roles."""
     def dependency(current_user: UserResponse = Depends(get_current_user)) -> UserResponse:
         if current_user.role in disallowed_roles:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Insufficient permissions",
-            )
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
         return current_user
     return dependency
+
+
+def require_manager(detail: str = "Insufficient permissions"):
+    """Dependency requiring a coordinator or administrator."""
+    return allow_roles(*MANAGER_ROLES, detail=detail)
+
+
+def require_confirmed(detail: str = "Insufficient permissions"):
+    """Dependency requiring any role other than applicant."""
+    return disallowed_roles(UserRole.APPLICANT, detail=detail)
+
+
+def is_manager(user: UserResponse) -> bool:
+    return user.role in MANAGER_ROLES
+
+
+def is_owner_or_role(
+    user: UserResponse,
+    owner_id: UUID | None,
+    roles: frozenset[UserRole] = MANAGER_ROLES,
+) -> bool:
+    return user.role in roles or (owner_id is not None and owner_id == user.id)
+
+
+def ensure_owner_or_role(
+    user: UserResponse,
+    owner_id: UUID | None,
+    detail: str,
+    roles: frozenset[UserRole] = MANAGER_ROLES,
+) -> None:
+    """Raise 403 unless the user owns the resource or holds one of the given roles."""
+    if not is_owner_or_role(user, owner_id, roles):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)

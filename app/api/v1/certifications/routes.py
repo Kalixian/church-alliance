@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from uuid import UUID
 
-from app.api.v1.auth.dependencies import get_current_user, allow_roles
+from app.api.v1.auth.dependencies import get_current_user, require_manager
 from app.db.database import get_db
 from app.db.user import UserResponse, UserRole
 from app.db.certification import (
@@ -21,7 +21,7 @@ from app.db.certification import (
 
 router = APIRouter(prefix="/certifications", tags=["certifications"])
 
-certification_managers = allow_roles(UserRole.ADMINISTRATOR, UserRole.COORDINATOR)
+certification_managers = require_manager()
 
 
 @router.post("", response_model=CertificationResponse)

@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class GalleryBase(BaseModel):
@@ -41,9 +41,21 @@ class PictureCreate(PictureBase):
 
 class PictureUpdate(BaseModel):
     caption: Optional[str] = None
-    url: Optional[str] = None
-    cloudinary_public_id: Optional[str] = None
     gallery_id: Optional[UUID] = None
+
+
+class PictureUploadConfirm(BaseModel):
+    """Fields from Cloudinary's signed upload response, plus the picture's details."""
+    public_id: str = Field(min_length=1, max_length=2048)
+    version: int
+    signature: str = Field(min_length=1, max_length=128)
+    caption: Optional[str] = None
+    gallery_id: Optional[UUID] = None
+
+
+class UploadSignatureResponse(BaseModel):
+    upload_url: str
+    fields: dict[str, str]
 
 
 class PictureResponse(PictureBase):

@@ -1,58 +1,13 @@
-"""CRUD operations for galleries and pictures."""
+"""CRUD operations for galleries and pictures. Database only: image storage is handled in app/services/pictures.py."""
 
-from io import BytesIO
 from uuid import UUID
 
-import cloudinary
-import cloudinary.uploader
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
-from app.config import settings
 from app.db.gallery.models import Gallery, Picture
 
 DEFAULT_GALLERY_NAME = "Default"
-
-
-def _configure_cloudinary() -> None:
-    """Configure Cloudinary from the application's settings."""
-    if settings.cloudinary_cloud_name and settings.cloudinary_api_key and settings.cloudinary_api_secret:
-        cloudinary.config(
-            cloud_name=settings.cloudinary_cloud_name,
-            api_key=settings.cloudinary_api_key,
-            api_secret=settings.cloudinary_api_secret,
-            secure=True,
-        )
-
-
-def _upload_picture_to_cloudinary(image_bytes: bytes, file_name: str | None = None) -> tuple[str, str | None]:
-    """Upload an image to Cloudinary and return the public URL and public ID."""
-    _configure_cloudinary()
-    if not settings.cloudinary_cloud_name or not settings.cloudinary_api_key or not settings.cloudinary_api_secret:
-        raise ValueError("Cloudinary credentials are not configured")
-
-    upload_result = cloudinary.uploader.upload(
-        BytesIO(image_bytes),
-        public_id=file_name or None,
-        resource_type="auto",
-        unique_filename=True,
-        overwrite=False,
-    )
-    url = str(upload_result.get("secure_url") or upload_result.get("url") or "")
-    public_id = upload_result.get("public_id")
-    return url, public_id
-
-
-def _delete_picture_from_cloudinary(public_id: str | None) -> None:
-    """Delete a Cloudinary-hosted image using its stored public ID."""
-    if not public_id:
-        return
-
-    _configure_cloudinary()
-    if not settings.cloudinary_cloud_name or not settings.cloudinary_api_key or not settings.cloudinary_api_secret:
-        return
-
-    cloudinary.uploader.destroy(public_id, resource_type="image")
 
 
 def create_gallery(db: Session, name: str) -> Gallery | None:
@@ -110,19 +65,16 @@ def update_gallery(db: Session, gallery_id: UUID, name: str | None = None) -> Ga
     return gallery
 
 
-def delete_gallery(db: Session, gallery_id: UUID) -> bool:
-    """Delete a gallery and all associated pictures."""
+def delete_gallery(db: Session, gallery_id: UUID) -> list[str] | None:
+    """Delete a gallery and all its pictures. Returns the deleted pictures' storage IDs, or None if not found."""
     gallery = get_gallery_by_id(db, gallery_id)
     if not gallery:
-        return False
+        return None
 
-    pictures = list(gallery.pictures)
-    for picture in pictures:
-        _delete_picture_from_cloudinary(picture.cloudinary_public_id)
-
+    public_ids = [picture.cloudinary_public_id for picture in gallery.pictures if picture.cloudinary_public_id]
     db.delete(gallery)
     db.commit()
-    return True
+    return public_ids
 
 
 def move_pictures_between_galleries(
@@ -149,9 +101,8 @@ def create_picture(
     caption: str | None,
     gallery_id: UUID | None,
     uploaded_by_id: UUID,
-    image_bytes: bytes | None = None,
-    file_name: str | None = None,
-    url: str | None = None,
+    url: str,
+    cloudinary_public_id: str | None = None,
 ) -> Picture | None:
     """Create a picture in a gallery."""
     resolved_gallery_id = gallery_id
@@ -163,19 +114,10 @@ def create_picture(
     if not gallery:
         return None
 
-    resolved_url = url
-    resolved_public_id = None
-    if image_bytes is not None:
-        upload_result = _upload_picture_to_cloudinary(image_bytes, file_name=file_name)
-        if isinstance(upload_result, tuple):
-            resolved_url, resolved_public_id = upload_result
-        else:
-            resolved_url = upload_result
-
     picture = Picture(
         caption=caption,
-        url=resolved_url,
-        cloudinary_public_id=resolved_public_id,
+        url=url,
+        cloudinary_public_id=cloudinary_public_id,
         gallery_id=resolved_gallery_id,
         uploaded_by_id=uploaded_by_id,
     )
@@ -188,6 +130,19 @@ def create_picture(
 def get_picture_by_id(db: Session, picture_id: UUID) -> Picture | None:
     """Retrieve a picture by its ID."""
     return db.query(Picture).filter(Picture.id == picture_id).first()
+
+
+def get_picture_by_public_id(db: Session, public_id: str) -> Picture | None:
+    """Retrieve a picture by its storage public ID."""
+    return db.query(Picture).filter(Picture.cloudinary_public_id == public_id).first()
+
+
+def get_existing_public_ids(db: Session, public_ids: list[str]) -> set[str]:
+    """Return which of the given storage public IDs are referenced by a picture."""
+    if not public_ids:
+        return set()
+    rows = db.query(Picture.cloudinary_public_id).filter(Picture.cloudinary_public_id.in_(public_ids)).all()
+    return {row[0] for row in rows}
 
 
 def get_all_pictures(
@@ -230,17 +185,14 @@ def update_picture(
     picture_id: UUID,
     caption: str | None = None,
     gallery_id: UUID | None = None,
-    url: str | None = None,
 ) -> Picture | None:
-    """Update a picture."""
+    """Update a picture's caption or gallery."""
     picture = get_picture_by_id(db, picture_id)
     if not picture:
         return None
 
     if caption is not None:
         picture.caption = caption
-    if url is not None:
-        picture.url = url
     if gallery_id is not None:
         gallery = get_gallery_by_id(db, gallery_id)
         if not gallery:
@@ -252,13 +204,13 @@ def update_picture(
     return picture
 
 
-def delete_picture(db: Session, picture_id: UUID) -> bool:
-    """Delete a picture."""
+def delete_picture(db: Session, picture_id: UUID) -> list[str] | None:
+    """Delete a picture. Returns its storage IDs (empty if it had none), or None if not found."""
     picture = get_picture_by_id(db, picture_id)
     if not picture:
-        return False
+        return None
 
-    _delete_picture_from_cloudinary(picture.cloudinary_public_id)
+    public_ids = [picture.cloudinary_public_id] if picture.cloudinary_public_id else []
     db.delete(picture)
     db.commit()
-    return True
+    return public_ids

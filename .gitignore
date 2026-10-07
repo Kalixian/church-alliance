@@ -6,6 +6,8 @@ __pycache__/
 .pytest_cache/
 .env
 .env.*
+deploy/contact.ini
+deploy/site.env
 .DS_Store
 *.sqlite3
 *.db

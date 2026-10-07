@@ -1,0 +1,30 @@
+# Caddy is the only service that publishes ports (80/443). It obtains and renews
+# Let's Encrypt certificates automatically and forwards requests to the other
+# services over the compose network by service name.
+#
+# SITE_DOMAIN comes from deploy/site.env. Without it Caddy serves
+# https://localhost with a locally trusted certificate, for testing.
+
+{$SITE_DOMAIN:localhost} {
+	encode zstd gzip
+	reverse_proxy static-site:80
+}
+
+# Optional: redirect www to the bare domain. Uncomment only once a DNS record
+# for www exists, or Caddy will keep retrying its certificate.
+#
+# www.{$SITE_DOMAIN} {
+# 	redir https://{$SITE_DOMAIN}{uri} permanent
+# }
+
+# Planned: when the React app and FastAPI backend move into compose, give each
+# its own subdomain here (plus DNS records), e.g.:
+#
+# app.{$SITE_DOMAIN} {
+# 	encode zstd gzip
+# 	reverse_proxy frontend:80
+# }
+#
+# api.{$SITE_DOMAIN} {
+# 	reverse_proxy api:8000
+# }

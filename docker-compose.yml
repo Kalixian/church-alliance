@@ -1,0 +1,53 @@
+# Production stack for the self-hosted server. Caddy is the single entry point
+# (HTTPS, ports 80/443) and routes to the other services on the "web" network.
+# Future services (the React frontend and the FastAPI api) join the same
+# network without publishing ports and get a route in deploy/Caddyfile.
+#
+#   docker compose up -d --build
+#
+# Needs deploy/site.env and deploy/contact.ini (see the *.example files).
+name: church-alliance
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp" # HTTP/3
+    env_file: deploy/site.env
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data # certificates; keep this volume or Let's Encrypt rate limits may apply
+      - caddy_config:/config
+    networks: [web]
+    depends_on: [static-site]
+
+  static-site:
+    build: ./static
+    restart: unless-stopped
+    volumes:
+      - type: bind
+        source: ./deploy/contact.ini
+        target: /run/secrets/contact.ini
+        read_only: true
+        bind:
+          create_host_path: false # fail loudly instead of creating a directory
+    networks: [web]
+
+  # api:
+  #   build: .
+  #   env_file: .env
+  #   networks: [web]
+  #
+  # frontend:
+  #   build: ./frontend
+  #   networks: [web]
+
+networks:
+  web:
+
+volumes:
+  caddy_data:
+  caddy_config:

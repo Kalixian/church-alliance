@@ -1,0 +1,3 @@
+# Scripts run via their #! line, which breaks with CRLF line endings.
+static/cgi-bin/*.py text eol=lf
+static/docker/*.sh text eol=lf

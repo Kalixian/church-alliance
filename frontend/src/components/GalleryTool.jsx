@@ -3,6 +3,34 @@ import { useEffect, useState } from 'react'
 const PAGE_SIZE = 24
 const LAST_GALLERY_STORAGE_KEY = 'church-alliance:last-gallery-id'
 
+// Uploads straight to Cloudinary using fields signed by our API; resolves with Cloudinary's signed response.
+const uploadToCloudinary = (uploadUrl, fields, file, onProgress) => new Promise((resolve, reject) => {
+  const formData = new FormData()
+  Object.entries(fields).forEach(([key, value]) => formData.append(key, value))
+  formData.append('file', file)
+
+  const request = new XMLHttpRequest()
+  request.open('POST', uploadUrl)
+  request.upload.onprogress = (event) => {
+    if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100))
+  }
+  request.onload = () => {
+    let body = {}
+    try {
+      body = JSON.parse(request.responseText)
+    } catch {
+      // Fall through to the generic error below.
+    }
+    if (request.status >= 200 && request.status < 300) {
+      resolve(body)
+    } else {
+      reject(new Error(body.error?.message || 'Unable to upload photo.'))
+    }
+  }
+  request.onerror = () => reject(new Error('Unable to reach the photo service. Please try again.'))
+  request.send(formData)
+})
+
 function GalleryTool({ apiBaseUrl, token, userRole, backendUserId }) {
   const [galleries, setGalleries] = useState([])
   const [pictures, setPictures] = useState([])
@@ -25,6 +53,7 @@ function GalleryTool({ apiBaseUrl, token, userRole, backendUserId }) {
   const [uploadFile, setUploadFile] = useState(null)
   const [uploadCaption, setUploadCaption] = useState('')
   const [isUploading, setIsUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
   const [uploadMessage, setUploadMessage] = useState('')
   const [refreshKey, setRefreshKey] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
@@ -113,15 +142,32 @@ function GalleryTool({ apiBaseUrl, token, userRole, backendUserId }) {
 
     setIsUploading(true)
     setUploadMessage('')
+    setUploadProgress(0)
     try {
-      const formData = new FormData()
-      formData.append('image', uploadFile)
-      formData.append('caption', uploadCaption.trim())
-      formData.append('gallery_id', selectedGallery)
-      const response = await fetch(`${apiBaseUrl}/api/v1/pictures`, {
+      const signatureResponse = await fetch(`${apiBaseUrl}/api/v1/pictures/upload-signature`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
-        body: formData,
+      })
+      if (!signatureResponse.ok) {
+        const responseError = await signatureResponse.json().catch(() => ({}))
+        throw new Error(responseError.detail || 'Unable to upload photo.')
+      }
+      const { upload_url: uploadUrl, fields } = await signatureResponse.json()
+      const uploaded = await uploadToCloudinary(uploadUrl, fields, uploadFile, setUploadProgress)
+
+      const response = await fetch(`${apiBaseUrl}/api/v1/pictures`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          public_id: uploaded.public_id,
+          version: uploaded.version,
+          signature: uploaded.signature,
+          caption: uploadCaption.trim(),
+          gallery_id: selectedGallery,
+        }),
       })
       if (!response.ok) {
         const responseError = await response.json().catch(() => ({}))
@@ -340,12 +386,19 @@ function GalleryTool({ apiBaseUrl, token, userRole, backendUserId }) {
               {galleries.map((gallery) => <option key={gallery.id} value={gallery.id}>{gallery.name}</option>)}
             </select>
           </label>
-          <button type="submit" disabled={isUploading}>{isUploading ? 'Uploading...' : 'Upload photo'}</button>
+          <button type="submit" disabled={isUploading}>{isUploading ? `Uploading... ${uploadProgress}%` : 'Upload photo'}</button>
         </form>
       ) : null}
       {uploadMessage ? <p className="gallery-message">{uploadMessage}</p> : null}
 
       <div className="gallery-filters">
+        <label className="gallery-select" htmlFor="gallery-filter">
+          Show a specific album
+          <select id="gallery-filter" value={selectedGallery} onChange={handleGalleryChange}>
+            <option value="">Show all albums</option>
+            {galleries.map((gallery) => <option key={gallery.id} value={gallery.id}>{gallery.name}</option>)}
+          </select>
+        </label>
         <form className="gallery-search" onSubmit={handleSearch}>
           <label htmlFor="gallery-search-input">Find a picture by its caption</label>
           <div className="gallery-search-row">
@@ -359,13 +412,6 @@ function GalleryTool({ apiBaseUrl, token, userRole, backendUserId }) {
             <button type="submit">Search</button>
           </div>
         </form>
-        <label className="gallery-select" htmlFor="gallery-filter">
-          Show a specific album
-          <select id="gallery-filter" value={selectedGallery} onChange={handleGalleryChange}>
-            <option value="">Show all albums</option>
-            {galleries.map((gallery) => <option key={gallery.id} value={gallery.id}>{gallery.name}</option>)}
-          </select>
-        </label>
       </div>
 
       {error ? <p className="gallery-message gallery-error">{error}</p> : null}

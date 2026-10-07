@@ -1,17 +1,20 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
-from app.api.v1.auth.dependencies import get_current_user
+from app.api.v1.auth.dependencies import (
+    ensure_owner_or_role,
+    get_current_user,
+    is_manager,
+    require_confirmed,
+    require_manager,
+)
 from app.db.database import get_db
 from app.db.gallery.crud import (
     create_gallery,
-    create_picture,
     count_pictures,
-    delete_gallery,
-    delete_picture,
     get_all_galleries,
     get_all_pictures,
     get_gallery_by_id,
@@ -25,25 +28,27 @@ from app.db.gallery.schemas import (
     GalleryCreate,
     GalleryResponse,
     GalleryUpdate,
-    PictureCreate,
     PictureResponse,
     PictureUpdate,
+    PictureUploadConfirm,
+    UploadSignatureResponse,
 )
-from app.db.user import UserResponse, UserRole
+from app.db.user import UserResponse
+from app.services.pictures import DuplicateUploadError, confirm_upload, remove_gallery, remove_picture
+from app.storage import ImageStorage, StorageUnavailableError, UploadVerificationError, get_image_storage
 
 router = APIRouter(prefix="/galleries", tags=["galleries"])
 pictures_router = APIRouter(prefix="/pictures", tags=["pictures"])
+
+gallery_managers = require_manager("Only coordinators and administrators can manage galleries")
 
 
 @router.post("", response_model=GalleryResponse)
 def create_gallery_route(
     gallery: GalleryCreate,
-    current_user: Annotated[UserResponse, Depends(get_current_user)],
+    current_user: Annotated[UserResponse, Depends(gallery_managers)],
     db: Session = Depends(get_db),
 ):
-    if current_user.role not in {UserRole.ADMINISTRATOR, UserRole.COORDINATOR}:
-        raise HTTPException(status_code=403, detail="Only coordinators and administrators can manage galleries")
-
     existing = create_gallery(db, gallery.name)
     if existing is None:
         raise HTTPException(status_code=409, detail="Gallery already exists")
@@ -72,12 +77,9 @@ def get_gallery(gallery_id: str, db: Session = Depends(get_db)):
 def update_gallery_route(
     gallery_id: str,
     gallery_update: GalleryUpdate,
-    current_user: Annotated[UserResponse, Depends(get_current_user)],
+    current_user: Annotated[UserResponse, Depends(gallery_managers)],
     db: Session = Depends(get_db),
 ):
-    if current_user.role not in {UserRole.ADMINISTRATOR, UserRole.COORDINATOR}:
-        raise HTTPException(status_code=403, detail="Only coordinators and administrators can manage galleries")
-
     try:
         gallery_uuid = UUID(gallery_id)
     except ValueError:
@@ -92,19 +94,17 @@ def update_gallery_route(
 @router.delete("/{gallery_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_gallery_route(
     gallery_id: str,
-    current_user: Annotated[UserResponse, Depends(get_current_user)],
+    current_user: Annotated[UserResponse, Depends(gallery_managers)],
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
+    storage: ImageStorage = Depends(get_image_storage),
 ):
-    if current_user.role not in {UserRole.ADMINISTRATOR, UserRole.COORDINATOR}:
-        raise HTTPException(status_code=403, detail="Only coordinators and administrators can manage galleries")
-
     try:
         gallery_uuid = UUID(gallery_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid gallery ID")
 
-    success = delete_gallery(db, gallery_uuid)
-    if not success:
+    if not remove_gallery(db, storage, background_tasks, gallery_uuid):
         raise HTTPException(status_code=404, detail="Gallery not found")
     return None
 
@@ -124,12 +124,12 @@ def list_pictures_for_gallery(gallery_id: str, db: Session = Depends(get_db)):
 def move_gallery_pictures_route(
     source_gallery_id: str,
     target_gallery_id: str,
-    current_user: Annotated[UserResponse, Depends(get_current_user)],
+    current_user: Annotated[
+        UserResponse,
+        Depends(require_manager("Only coordinators and administrators can move galleries")),
+    ],
     db: Session = Depends(get_db),
 ):
-    if current_user.role not in {UserRole.ADMINISTRATOR, UserRole.COORDINATOR}:
-        raise HTTPException(status_code=403, detail="Only coordinators and administrators can move galleries")
-
     try:
         source_uuid = UUID(source_gallery_id)
         target_uuid = UUID(target_gallery_id)
@@ -142,39 +142,47 @@ def move_gallery_pictures_route(
     return moved_pictures
 
 
+@pictures_router.post("/upload-signature", response_model=UploadSignatureResponse)
+def create_upload_signature_route(
+    current_user: Annotated[UserResponse, Depends(require_confirmed("Only confirmed users can add pictures"))],
+    storage: ImageStorage = Depends(get_image_storage),
+):
+    """Sign a direct browser-to-Cloudinary upload. Confirm it afterwards with POST /pictures."""
+    try:
+        signature = storage.create_upload_signature()
+    except StorageUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return UploadSignatureResponse(upload_url=signature.upload_url, fields=signature.fields)
+
+
 @pictures_router.post("", response_model=PictureResponse)
 def create_picture_route(
-    image: UploadFile = File(...),
-    caption: str | None = Form(None),
-    gallery_id: str | None = Form(None),
-    current_user: UserResponse = Depends(get_current_user),
+    upload: PictureUploadConfirm,
+    current_user: Annotated[UserResponse, Depends(require_confirmed("Only confirmed users can add pictures"))],
     db: Session = Depends(get_db),
+    storage: ImageStorage = Depends(get_image_storage),
 ):
-    if current_user.role == UserRole.APPLICANT:
-        raise HTTPException(status_code=403, detail="Only confirmed users can add pictures")
-
-    resolved_gallery_id = None
-    if gallery_id:
-        try:
-            resolved_gallery_id = UUID(gallery_id)
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid gallery ID")
-
-    image_bytes = image.file.read()
+    """Save a picture for a completed direct upload, using Cloudinary's signed upload response."""
     try:
-        db_picture = create_picture(
+        picture = confirm_upload(
             db,
-            caption=caption,
-            gallery_id=resolved_gallery_id,
+            storage,
+            public_id=upload.public_id,
+            version=upload.version,
+            signature=upload.signature,
+            caption=upload.caption,
+            gallery_id=upload.gallery_id,
             uploaded_by_id=current_user.id,
-            image_bytes=image_bytes,
-            file_name=image.filename,
         )
-    except ValueError as upload_error:
-        raise HTTPException(status_code=503, detail=str(upload_error)) from upload_error
-    if not db_picture:
+    except UploadVerificationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except DuplicateUploadError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except StorageUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    if not picture:
         raise HTTPException(status_code=404, detail="Gallery not found")
-    return db_picture
+    return picture
 
 
 @pictures_router.get("", response_model=list[PictureResponse])
@@ -226,18 +234,16 @@ def update_picture_route(
     if not picture:
         raise HTTPException(status_code=404, detail="Picture not found")
 
-    if picture_update.gallery_id is not None and current_user.role not in {UserRole.ADMINISTRATOR, UserRole.COORDINATOR}:
+    if picture_update.gallery_id is not None and not is_manager(current_user):
         raise HTTPException(status_code=403, detail="Only coordinators and administrators can change a picture's gallery")
 
-    if current_user.role not in {UserRole.ADMINISTRATOR, UserRole.COORDINATOR} and picture.uploaded_by_id != current_user.id:
-        raise HTTPException(status_code=403, detail="You can only update your own pictures")
+    ensure_owner_or_role(current_user, picture.uploaded_by_id, "You can only update your own pictures")
 
     updated_picture = update_picture(
         db,
         picture_uuid,
         caption=picture_update.caption,
         gallery_id=picture_update.gallery_id,
-        url=picture_update.url,
     )
     if not updated_picture:
         raise HTTPException(status_code=404, detail="Picture not found")
@@ -248,7 +254,9 @@ def update_picture_route(
 def delete_picture_route(
     picture_id: str,
     current_user: Annotated[UserResponse, Depends(get_current_user)],
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
+    storage: ImageStorage = Depends(get_image_storage),
 ):
     try:
         picture_uuid = UUID(picture_id)
@@ -259,11 +267,9 @@ def delete_picture_route(
     if not picture:
         raise HTTPException(status_code=404, detail="Picture not found")
 
-    if current_user.role not in {UserRole.ADMINISTRATOR, UserRole.COORDINATOR} and picture.uploaded_by_id != current_user.id:
-        raise HTTPException(status_code=403, detail="You can only delete pictures you uploaded")
+    ensure_owner_or_role(current_user, picture.uploaded_by_id, "You can only delete pictures you uploaded")
 
-    success = delete_picture(db, picture_uuid)
-    if not success:
+    if not remove_picture(db, storage, background_tasks, picture_uuid):
         raise HTTPException(status_code=404, detail="Picture not found")
     return None
 

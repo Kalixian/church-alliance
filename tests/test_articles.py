@@ -1,4 +1,4 @@
-from jose import jwt
+import jwt
 
 from app.config import settings
 from app.db.user import UserCreate, UserRole, create_user

@@ -4,7 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.api.v1.auth.dependencies import get_current_user
+from app.api.v1.auth.dependencies import ensure_owner_or_role, get_current_user, require_confirmed
 from app.db.article import (
     ArticleCreate,
     ArticleResponse,
@@ -16,7 +16,7 @@ from app.db.article import (
     update_article,
 )
 from app.db.database import get_db
-from app.db.user import UserResponse, UserRole
+from app.db.user import UserResponse
 
 router = APIRouter(prefix="/articles", tags=["articles"])
 
@@ -28,18 +28,12 @@ def _parse_article_id(article_id: str) -> UUID:
         raise HTTPException(status_code=400, detail="Invalid article ID") from exc
 
 
-def _can_manage_article(article, current_user: UserResponse) -> bool:
-    return current_user.role in {UserRole.ADMINISTRATOR, UserRole.COORDINATOR} or article.creator_id == current_user.id
-
-
 @router.post("", response_model=ArticleResponse, status_code=status.HTTP_201_CREATED)
 def create_article_route(
     article: ArticleCreate,
-    current_user: Annotated[UserResponse, Depends(get_current_user)],
+    current_user: Annotated[UserResponse, Depends(require_confirmed("Applicants cannot create articles"))],
     db: Session = Depends(get_db),
 ):
-    if current_user.role == UserRole.APPLICANT:
-        raise HTTPException(status_code=403, detail="Applicants cannot create articles")
     return create_article(db, article, current_user.id)
 
 
@@ -71,8 +65,7 @@ def update_article_route(
     article = get_article_by_id(db, parsed_id)
     if not article:
         raise HTTPException(status_code=404, detail="Article not found")
-    if not _can_manage_article(article, current_user):
-        raise HTTPException(status_code=403, detail="You can only update your own articles")
+    ensure_owner_or_role(current_user, article.creator_id, "You can only update your own articles")
     return update_article(db, parsed_id, article_update)
 
 
@@ -86,7 +79,6 @@ def delete_article_route(
     article = get_article_by_id(db, parsed_id)
     if not article:
         raise HTTPException(status_code=404, detail="Article not found")
-    if not _can_manage_article(article, current_user):
-        raise HTTPException(status_code=403, detail="You can only delete your own articles")
+    ensure_owner_or_role(current_user, article.creator_id, "You can only delete your own articles")
     delete_article(db, parsed_id)
     return None

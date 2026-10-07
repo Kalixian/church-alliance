@@ -13,6 +13,43 @@ from app.db.base import Base
 from app.main import app
 from app.db.database import get_db
 from app.config import settings
+from app.storage import (
+    StorageUnavailableError,
+    StoredImage,
+    UploadSignature,
+    UploadVerificationError,
+    get_image_storage,
+)
+
+
+class FakeImageStorage:
+    """In-memory stand-in for CloudinaryImageStorage."""
+
+    def __init__(self):
+        self.confirmed: list[str] = []
+        self.deleted: list[str] = []
+        self.fail_deletes = False
+
+    @staticmethod
+    def signature_for(public_id: str, version: int) -> str:
+        return f"signed:{public_id}:{version}"
+
+    def create_upload_signature(self) -> UploadSignature:
+        return UploadSignature(upload_url="https://upload.example.test", fields={"signature": "upload-signature"})
+
+    def verify_upload(self, public_id: str, version: int, signature: str) -> StoredImage:
+        if signature != self.signature_for(public_id, version):
+            raise UploadVerificationError("Upload signature is invalid")
+        return StoredImage(public_id=public_id, url=f"https://images.example.test/v{version}/{public_id}")
+
+    def confirm(self, public_id: str) -> None:
+        self.confirmed.append(public_id)
+
+    def delete(self, public_ids) -> None:
+        if self.fail_deletes:
+            raise StorageUnavailableError("Could not delete images from Cloudinary")
+        self.deleted.extend(public_ids)
+
 
 engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -37,7 +74,12 @@ def db_session():
 
 
 @pytest.fixture()
-def client(db_session, monkeypatch):
+def image_storage():
+    return FakeImageStorage()
+
+
+@pytest.fixture()
+def client(db_session, image_storage, monkeypatch):
     def override_get_db():
         try:
             yield db_session
@@ -45,6 +87,7 @@ def client(db_session, monkeypatch):
             pass
 
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_image_storage] = lambda: image_storage
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
