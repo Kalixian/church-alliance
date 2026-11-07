@@ -17,6 +17,16 @@ class Settings(BaseSettings):
     # Unconfirmed direct uploads older than this are removed by `python -m app.storage.cleanup`.
     cloudinary_pending_upload_ttl_hours: int = 24
 
+    # Contact Us form (POST /api/v1/contact): SMTP account used to email each
+    # administrator. Same meaning (and env var names) as the static site's
+    # deploy/contact.ini keys; recipients come from the database, not settings.
+    contact_smtp_host: str = "smtp.gmail.com"
+    contact_smtp_port: int = 587
+    contact_smtp_user: Optional[str] = None
+    contact_smtp_password: Optional[str] = None
+    contact_sender: Optional[str] = None
+    contact_sender_name: str = "Church Alliance Website"
+
     jwt_algorithm: str = "HS256"
     jwt_expiration_hours: int = 24
 

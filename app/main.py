@@ -9,6 +9,7 @@ from app.api.v1.assets import router as assets_router
 from app.api.v1.galleries import router as galleries_router, pictures_router
 from app.api.v1.users import router as users_router
 from app.api.v1.articles import router as articles_router
+from app.api.v1.contact import router as contact_router
 
 
 @asynccontextmanager
@@ -47,6 +48,7 @@ app.include_router(galleries_router, prefix="/api/v1")
 app.include_router(pictures_router, prefix="/api/v1")
 app.include_router(users_router, prefix="/api/v1")
 app.include_router(articles_router, prefix="/api/v1")
+app.include_router(contact_router, prefix="/api/v1")
 
 @app.get("/")
 def main():

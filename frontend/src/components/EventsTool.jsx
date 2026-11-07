@@ -259,7 +259,7 @@ function EventsTool({ apiBaseUrl, token, userRole, authUserId, onSelectEvent }) 
     <section className="main-content events-tool" aria-live="polite" aria-labelledby="events-title">
       <div className="tool-header">
         <div>
-          <h2 id="events-title">Events</h2>
+          <h2 id="events-title" className="sr-only">Events</h2>
         </div>
         <div className="events-header-actions">
           <span className="tool-count">{totalEvents} events</span>

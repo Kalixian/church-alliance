@@ -126,7 +126,7 @@ function MembersTool({ token, authUserId, apiBaseUrl, canEditRoles }) {
     <article className="members-tool content-block">
       <div className="tool-header">
         <div>
-          <h3>Members</h3>
+          <h2 className="sr-only">Members</h2>
           <p>Additional control for church membership, certifications, experience, assets, and notes will be added. Users wil be able to update their own info but not others, unless admin.</p>
         </div>
         <span className="tool-count">{totalUsers} members</span>

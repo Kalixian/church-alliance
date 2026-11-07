@@ -135,7 +135,7 @@ function CertificationsTool({ token, apiBaseUrl, onBack }) {
       <div className="tool-header">
         <div>
           <button type="button" className="text-button" onClick={onBack}>Back to Admin</button>
-          <h2 id="certifications-title">Certifications</h2>
+          <h2 id="certifications-title" className="sr-only">Certifications</h2>
         </div>
         <span className="tool-count">{totalCertifications} certifications</span>
       </div>

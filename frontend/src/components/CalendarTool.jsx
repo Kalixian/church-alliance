@@ -73,8 +73,7 @@ function CalendarTool({ apiBaseUrl, token, onSelectEvent }) {
       <div className="tool-header calendar-header">
         <h3>I just started working on the calendar, please ignore this</h3>
         <div>
-          <p className="section-kicker">Schedule</p>
-          <h2 id="calendar-title">Calendar</h2>
+          <h2 id="calendar-title" className="sr-only">Calendar</h2>
         </div>
         <div className="calendar-navigation" aria-label="Calendar month navigation">
           <button type="button" aria-label="Previous month" onClick={() => setDisplayMonth((month) => new Date(month.getFullYear(), month.getMonth() - 1, 1))}>Previous</button>

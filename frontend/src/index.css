@@ -1,16 +1,22 @@
+/* Church Alliance: foundation shared with the static site (static/styles.css). */
+
 :root {
-  font-family: Inter, 'Segoe UI', sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
-  color: #1f2a27;
-  background: #f5f1ea;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  --red: #c8102e;
+  --red-dark: #9b0c23;
+  --red-tint: #fdf1f3;
+  --ink: #1d1d1f;
+  --ink-soft: #4a4a4f;
+  --rule: #e6e2e3;
+  --paper: #ffffff;
+  --paper-alt: #f8f6f6;
+  --gutter: clamp(1.25rem, 5vw, 4rem);
+  --measure: 70ch;
+  --radius: 10px;
 }
 
-* {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
@@ -20,9 +26,69 @@ html {
 
 body {
   margin: 0;
-  min-width: 320px;
-  min-height: 100vh;
-  background: linear-gradient(180deg, #f5f1ea 0%, #efe6db 100%);
+  font-family: "Source Sans 3", "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 1.125rem;
+  line-height: 1.7;
+  color: var(--ink);
+  background: var(--paper);
+}
+
+img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+a {
+  color: var(--red);
+  text-underline-offset: 0.2em;
+}
+
+a:hover {
+  color: var(--red-dark);
+}
+
+a:focus-visible {
+  outline: 3px solid var(--red);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+h1,
+h2,
+h3 {
+  line-height: 1.2;
+  margin: 0 0 0.75em;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+p {
+  margin: 0 0 1.25em;
+}
+
+.skip-link {
+  position: absolute;
+  left: -999px;
+  top: 0;
+  background: var(--red);
+  color: #fff;
+  padding: 0.75rem 1.25rem;
+  z-index: 100;
+}
+
+.skip-link:focus {
+  left: 1rem;
+  color: #fff;
+}
+
+:root {
+  --red-soft: #f0b3bd;
+  --red-tint-strong: #fbe3e7;
+  --field-border: #c9c4c5;
+  --ok: #2e7d32;
+  --ok-tint: #eaf6ec;
+  --ok-dark: #1b5e20;
 }
 
 button,
@@ -32,18 +98,24 @@ select {
   font: inherit;
 }
 
-img {
-  max-width: 100%;
-  display: block;
-}
-
 #root {
   min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
-h1,
-h2,
-h3,
-p {
-  margin-top: 0;
+#main {
+  flex: 1;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }

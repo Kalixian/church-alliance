@@ -302,8 +302,7 @@ function GalleryTool({ apiBaseUrl, token, userRole, backendUserId }) {
     <section className="gallery-tool" aria-labelledby="gallery-title">
       <div className="tool-header">
         <div>
-          <p className="section-kicker">Photo archive</p>
-          <h2 id="gallery-title">Photo Gallery</h2>
+          <h2 id="gallery-title" className="sr-only">Photo Gallery</h2>
         </div>
         <div className="events-header-actions">
           <span className="gallery-count">{total} {total === 1 ? 'photo' : 'photos'}</span>

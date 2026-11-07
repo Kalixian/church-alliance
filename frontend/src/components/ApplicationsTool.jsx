@@ -127,7 +127,7 @@ function ApplicationsTool({ token, authUserId, apiBaseUrl, onBack }) {
           <button type="button" className="text-button" onClick={onBack}>
             Back to Admin
           </button>
-          <h3>Site Access Applications</h3>
+          <h2 className="sr-only">Site Access Applications</h2>
         </div>
         <span className="tool-count">{totalApplicants} applications</span>
       </div>

@@ -65,5 +65,12 @@ commented in both files), e.g. `app.<domain>` → `frontend` and
 new frontend origin to the CORS list in `app/main.py` and point
 `VITE_API_URL` at the API's public URL.
 
+The React app uses client-side routes (`/about`, `/events/42`, ...), so
+whatever serves its build must fall back to `index.html` for unknown paths,
+e.g. in Caddy: `root * /srv/frontend`, `try_files {path} /index.html`,
+`file_server`. The API's Contact Us endpoint emails every administrator in the database
+and needs the `CONTACT_SMTP_*` settings in the API's environment (same
+values as `deploy/contact.ini`).
+
 Keep site-wide settings like `SITE_DOMAIN` out of the root `.env`: the
 backend's settings class rejects unknown keys there.

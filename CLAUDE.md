@@ -21,12 +21,14 @@ Frontend (React 19 + Vite, run from `frontend/`):
 
 Static public site (`static/`, plain HTML/CSS, independent of the React app and API):
 - Contact form handler is `static/cgi-bin/contact.py` (stdlib-only CGI, sends via Gmail SMTP); tested by `tests/test_contact_form.py`.
+- The React app's Contact page instead posts JSON to `POST /api/v1/contact` (`app/api/v1/contact/`, logic in `app/services/contact.py`, tested by `tests/test_contact_api.py`), which emails a separate copy to every user with the `administrator` role (503 if there are none). It is a port of the CGI's rules, not shared code: change both together.
 - Production runs via `docker compose up -d --build` from the repo root: `caddy` (HTTPS, the only service publishing ports, config in `deploy/Caddyfile`) in front of `static-site` (Apache, `static/Dockerfile`). Needs git-ignored `deploy/site.env` and `deploy/contact.ini`; see `deploy/README.md`.
 - Future services join the compose `web` network without published ports and get a route in `deploy/Caddyfile`. Don't put compose/site variables in the root `.env`: the backend's `Settings` rejects unknown keys.
 
 ## Configuration
 
-- Backend reads `.env` at repo root via `pydantic-settings` (`app/config/settings.py`): `DATABASE_URL` (defaults to SQLite `./church-alliance.db`), `SUPABASE_URL`, `SUPABASE_JWT_SECRET`, `CLOUDINARY_*`.
+- Templates: copy `example.env` to `.env` and `frontend/example.env` to `frontend/.env` (both `.env` files are git-ignored). Keep the templates in sync when adding a setting.
+- Backend reads `.env` at repo root via `pydantic-settings` (`app/config/settings.py`): `DATABASE_URL` (defaults to SQLite `./church-alliance.db`), `SUPABASE_URL`, `SUPABASE_JWT_SECRET`, `CLOUDINARY_*`, and `CONTACT_SMTP_USER` / `CONTACT_SMTP_PASSWORD` (plus optional `CONTACT_SMTP_HOST`, `_PORT`, `CONTACT_SENDER`, `CONTACT_SENDER_NAME`), the SMTP account the Contact Us endpoint sends from; without them `POST /api/v1/contact` returns 503.
 - Frontend reads `frontend/.env`: `VITE_API_URL`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`.
 - CORS origins are hard-coded in `app/main.py`; add new frontend hosts there. The `X-Total-Count` header is exposed for paginated lists.
 
@@ -56,7 +58,7 @@ The frontend mirrors these rules to decide which sections are visible (`frontend
 
 Uploads go browser → Cloudinary directly: `POST /pictures/upload-signature` returns signed form fields (folder, `pending` tag, allowed formats); the browser posts the file to Cloudinary, then sends Cloudinary's signed response (`public_id`, `version`, `signature`) to `POST /pictures`, which verifies it, removes the `pending` tag and saves the row. Abandoned uploads keep the tag and are purged by `uv run python -m app.storage.cleanup` (meant to run on a schedule). Image deletes run as background tasks after the row is committed; failures are logged, not raised.
 
-**Frontend.** Single-page app without a router: `App.jsx` owns Supabase session, role, and `activeSection` state; `components/MainContent.jsx` switches on `activeSection` to render one `*Tool.jsx` component, passing `apiBaseUrl`, the auth token, `userRole`, and `backendUserId` as props. Components call the API directly with `fetch`. Rich text is edited with Slate; HTML event descriptions are rendered via `dangerouslySetInnerHTML` wrapped in `DOMPurify.sanitize`.
+**Frontend.** React Router (`BrowserRouter` in `main.jsx`, routes in `App.jsx`). It mirrors the static site's look and content: `index.css` + `styles/site.css` are ported from `static/styles.css` (same class names and `--red`/`--ink`/... tokens), and `App.css` styles the tools with those tokens. Keep the static pages and the React pages (`pages/HomePage`, `AboutPage`, `CoursesPage`, `ContactPage`) in step when content changes. `auth/AuthProvider.jsx` owns the Supabase session, sync-user call, role and the login modal; read them with `useAuth()` from `auth/authContext.js` (`token`, `userRole`, `backendUserId`, `isConfirmed`, `isManager`, `isAdmin`, ...). `components/layout/` holds `Layout` (header, footer, scroll-to-hash), `SiteHeader` (public nav + account menu with Members/Admin/Log out), and `RequireRole` (redirects to `/` for members-only and admin routes). `pages/ToolPages.jsx` wraps each `*Tool.jsx` in a page banner and passes it props from `useAuth()`; tools take navigation as callbacks (`onSelectEvent`, `onBack`). Components call the API directly with `fetch`. Rich text is edited with Slate; HTML event descriptions are rendered via `dangerouslySetInnerHTML` wrapped in `DOMPurify.sanitize`.
 
 ## Tests
 

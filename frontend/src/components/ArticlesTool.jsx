@@ -142,8 +142,7 @@ function ArticlesTool({ apiBaseUrl, token, userRole, backendUserId }) {
     <section className="news-tool" aria-labelledby="news-title">
       <div className="tool-header">
         <div>
-          <p className="section-kicker">Updates and stories</p>
-          <h2 id="news-title">News</h2>
+          <h2 id="news-title" className="sr-only">News</h2>
         </div>
         {canCreate ? <button type="button" className="new-event-button" onClick={openCreate}>+ Add article</button> : null}
       </div>
