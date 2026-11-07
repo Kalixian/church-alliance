@@ -1,0 +1,6 @@
+# node_modules holds host-platform binaries (e.g. Windows builds of rolldown);
+# the image installs its own. .env is kept on purpose: Vite reads it at build.
+node_modules
+dist
+Dockerfile
+.dockerignore

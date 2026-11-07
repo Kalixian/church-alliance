@@ -4,7 +4,18 @@ A project created with FastAPI CLI.
 
 ## Quick Start
 
-### Start the development server
+### With Docker (API + React app together)
+
+```bash
+cp example.env .env                     # then fill in
+cp frontend/example.env frontend/.env   # then fill in
+docker compose -f docker-compose.dev.yml up --build
+```
+
+React app on http://localhost:5173, API docs on http://localhost:8000/docs.
+Production deployment: see `deploy/README.md`.
+
+### Start the development server without Docker
 
 ```bash
 uv run fastapi dev

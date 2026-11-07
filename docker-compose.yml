@@ -1,11 +1,14 @@
 # Production stack for the self-hosted server. Caddy is the single entry point
-# (HTTPS, ports 80/443) and routes to the other services on the "web" network.
-# Future services (the React frontend and the FastAPI api) join the same
-# network without publishing ports and get a route in deploy/Caddyfile.
+# (HTTPS, ports 80/443) and routes to the other services on the "web" network,
+# which don't publish ports. For local development use docker-compose.dev.yml.
 #
 #   docker compose up -d --build
 #
-# Needs deploy/site.env and deploy/contact.ini (see the *.example files).
+# Needs deploy/site.env (see site.example.env), the root .env (api) and
+# frontend/.env (read when the frontend is built).
+#
+# The old Apache static site (static/) is no longer deployed: the React app
+# replaces it at https://<domain>.
 name: church-alliance
 
 services:
@@ -22,28 +25,28 @@ services:
       - caddy_data:/data # certificates; keep this volume or Let's Encrypt rate limits may apply
       - caddy_config:/config
     networks: [web]
-    depends_on: [static-site]
+    depends_on: [frontend, api]
 
-  static-site:
-    build: ./static
+  # FastAPI backend, reached as https://<domain>/api/... (same origin as the
+  # React app, so no CORS is involved).
+  api:
+    build: .
     restart: unless-stopped
+    env_file: .env
+    environment:
+      # Overrides any DATABASE_URL in .env so SQLite lands on the volume.
+      # To use another database, change this line.
+      DATABASE_URL: sqlite:////data/church-alliance.db
     volumes:
-      - type: bind
-        source: ./deploy/contact.ini
-        target: /run/secrets/contact.ini
-        read_only: true
-        bind:
-          create_host_path: false # fail loudly instead of creating a directory
+      - api_data:/data
     networks: [web]
 
-  # api:
-  #   build: .
-  #   env_file: .env
-  #   networks: [web]
-  #
-  # frontend:
-  #   build: ./frontend
-  #   networks: [web]
+  # React app (static build). VITE_* values are baked in at build time, so
+  # rebuild (`docker compose up -d --build frontend`) after editing frontend/.env.
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    networks: [web]
 
 networks:
   web:
@@ -51,3 +54,4 @@ networks:
 volumes:
   caddy_data:
   caddy_config:
+  api_data: # the SQLite database; back this up

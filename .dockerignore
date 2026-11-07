@@ -1,0 +1,7 @@
+# Build context for the API image (Dockerfile at the repo root). Only what it
+# copies is let through; secrets (.env) and databases never enter the image.
+*
+!pyproject.toml
+!uv.lock
+!app/
+**/__pycache__

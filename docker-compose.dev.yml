@@ -1,0 +1,45 @@
+# Local development: the FastAPI api and the React dev server, both with
+# hot reload on source changes. No Caddy, no HTTPS, no static site.
+#
+#   docker compose -f docker-compose.dev.yml up --build
+#
+# Then open http://localhost:5173 (React) and http://localhost:8000/docs (API).
+# Needs the root .env and frontend/.env (copy the example.env templates).
+name: church-alliance-dev
+
+services:
+  api:
+    build: .
+    command: ["fastapi", "dev", "app/main.py", "--host", "0.0.0.0", "--port", "8000"]
+    env_file: .env
+    environment:
+      # A separate database on a volume, not the host's ./church-alliance.db.
+      DATABASE_URL: sqlite:////data/church-alliance.db
+      # File change events don't cross Windows/macOS bind mounts; poll instead.
+      WATCHFILES_FORCE_POLLING: "true"
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app:/app/app
+      - dev_api_data:/data
+
+  frontend:
+    image: node:22-alpine
+    working_dir: /app
+    # `npm install` is a quick no-op once node_modules matches package-lock.json.
+    command: ["sh", "-c", "npm install && npm run dev -- --host 0.0.0.0"]
+    environment:
+      # The browser runs on the host, so it reaches the api via the published port.
+      VITE_API_URL: http://localhost:8000
+      WATCH_POLLING: "true" # read by vite.config.js
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      # Keeps the container's Linux node_modules apart from the host's.
+      - dev_node_modules:/app/node_modules
+    depends_on: [api]
+
+volumes:
+  dev_api_data:
+  dev_node_modules:
