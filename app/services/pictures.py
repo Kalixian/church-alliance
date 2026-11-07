@@ -10,6 +10,7 @@ from uuid import UUID
 from fastapi import BackgroundTasks
 from sqlalchemy.orm import Session
 
+from app.db.article.crud import delete_article
 from app.db.gallery.crud import (
     create_picture,
     delete_gallery,
@@ -92,6 +93,21 @@ def remove_gallery(
     if public_ids is None:
         return False
     background_tasks.add_task(_delete_images, storage, public_ids)
+    return True
+
+
+def remove_article(
+    db: Session,
+    storage: ImageStorage,
+    background_tasks: BackgroundTasks,
+    article_id: UUID,
+) -> bool:
+    """Delete an article with its gallery and Pictures, then their images after the response is sent."""
+    public_ids = delete_article(db, article_id)
+    if public_ids is None:
+        return False
+    if public_ids:
+        background_tasks.add_task(_delete_images, storage, public_ids)
     return True
 
 

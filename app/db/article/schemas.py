@@ -122,6 +122,7 @@ class ArticleResponse(ArticleBase):
     id: UUID
     creator_id: UUID
     creator: UserResponse
+    gallery_id: UUID | None = None
     created_at: datetime
     updated_at: datetime
 

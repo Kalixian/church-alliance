@@ -5,6 +5,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, R
 from sqlalchemy.orm import Session
 
 from app.api.v1.auth.dependencies import (
+    ensure_can_manage_article,
     ensure_owner_or_role,
     get_current_user,
     is_manager,
@@ -12,6 +13,7 @@ from app.api.v1.auth.dependencies import (
     require_manager,
 )
 from app.db.database import get_db
+from app.db.gallery.models import Gallery
 from app.db.gallery.crud import (
     create_gallery,
     count_pictures,
@@ -41,6 +43,19 @@ router = APIRouter(prefix="/galleries", tags=["galleries"])
 pictures_router = APIRouter(prefix="/pictures", tags=["pictures"])
 
 gallery_managers = require_manager("Only coordinators and administrators can manage galleries")
+
+ARTICLE_GALLERY_DETAIL = "This gallery belongs to a news article. Manage its photos from the article."
+ARTICLE_PHOTO_DETAIL = "You can only change photos on your own articles"
+
+
+def _reject_article_gallery(gallery: Gallery | None) -> None:
+    """Article galleries are managed through their article, not the gallery routes."""
+    if gallery is not None and gallery.article_id is not None:
+        raise HTTPException(status_code=409, detail=ARTICLE_GALLERY_DETAIL)
+
+
+def _ensure_can_change_article_photos(current_user: UserResponse, gallery: Gallery) -> None:
+    ensure_can_manage_article(current_user, gallery.article.creator_id, ARTICLE_PHOTO_DETAIL)
 
 
 @router.post("", response_model=GalleryResponse)
@@ -85,6 +100,7 @@ def update_gallery_route(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid gallery ID")
 
+    _reject_article_gallery(get_gallery_by_id(db, gallery_uuid))
     gallery = update_gallery(db, gallery_uuid, name=gallery_update.name)
     if not gallery:
         raise HTTPException(status_code=404, detail="Gallery not found")
@@ -104,6 +120,7 @@ def delete_gallery_route(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid gallery ID")
 
+    _reject_article_gallery(get_gallery_by_id(db, gallery_uuid))
     if not remove_gallery(db, storage, background_tasks, gallery_uuid):
         raise HTTPException(status_code=404, detail="Gallery not found")
     return None
@@ -136,6 +153,8 @@ def move_gallery_pictures_route(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid gallery ID")
 
+    _reject_article_gallery(get_gallery_by_id(db, source_uuid))
+    _reject_article_gallery(get_gallery_by_id(db, target_uuid))
     moved_pictures = move_pictures_between_galleries(db, source_uuid, target_uuid)
     if moved_pictures is None:
         raise HTTPException(status_code=404, detail="Gallery not found")
@@ -163,6 +182,10 @@ def create_picture_route(
     storage: ImageStorage = Depends(get_image_storage),
 ):
     """Save a picture for a completed direct upload, using Cloudinary's signed upload response."""
+    if upload.gallery_id is not None:
+        gallery = get_gallery_by_id(db, upload.gallery_id)
+        if gallery is not None and gallery.article_id is not None:
+            _ensure_can_change_article_photos(current_user, gallery)
     try:
         picture = confirm_upload(
             db,
@@ -234,10 +257,18 @@ def update_picture_route(
     if not picture:
         raise HTTPException(status_code=404, detail="Picture not found")
 
-    if picture_update.gallery_id is not None and not is_manager(current_user):
-        raise HTTPException(status_code=403, detail="Only coordinators and administrators can change a picture's gallery")
+    if picture.gallery.article_id is not None:
+        _ensure_can_change_article_photos(current_user, picture.gallery)
+    else:
+        ensure_owner_or_role(current_user, picture.uploaded_by_id, "You can only update your own pictures")
 
-    ensure_owner_or_role(current_user, picture.uploaded_by_id, "You can only update your own pictures")
+    if picture_update.gallery_id is not None and picture_update.gallery_id != picture.gallery_id:
+        if not is_manager(current_user):
+            raise HTTPException(
+                status_code=403, detail="Only coordinators and administrators can change a picture's gallery"
+            )
+        _reject_article_gallery(picture.gallery)
+        _reject_article_gallery(get_gallery_by_id(db, picture_update.gallery_id))
 
     updated_picture = update_picture(
         db,
@@ -267,7 +298,10 @@ def delete_picture_route(
     if not picture:
         raise HTTPException(status_code=404, detail="Picture not found")
 
-    ensure_owner_or_role(current_user, picture.uploaded_by_id, "You can only delete pictures you uploaded")
+    if picture.gallery.article_id is not None:
+        _ensure_can_change_article_photos(current_user, picture.gallery)
+    else:
+        ensure_owner_or_role(current_user, picture.uploaded_by_id, "You can only delete pictures you uploaded")
 
     if not remove_picture(db, storage, background_tasks, picture_uuid):
         raise HTTPException(status_code=404, detail="Picture not found")

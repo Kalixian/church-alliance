@@ -1,35 +1,9 @@
 import { useEffect, useState } from 'react'
+import { confirmPicture, fetchUploadSignature, uploadToCloudinary } from '../utils/uploads'
 
 const PAGE_SIZE = 24
 const LAST_GALLERY_STORAGE_KEY = 'church-alliance:last-gallery-id'
 
-// Uploads straight to Cloudinary using fields signed by our API; resolves with Cloudinary's signed response.
-const uploadToCloudinary = (uploadUrl, fields, file, onProgress) => new Promise((resolve, reject) => {
-  const formData = new FormData()
-  Object.entries(fields).forEach(([key, value]) => formData.append(key, value))
-  formData.append('file', file)
-
-  const request = new XMLHttpRequest()
-  request.open('POST', uploadUrl)
-  request.upload.onprogress = (event) => {
-    if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100))
-  }
-  request.onload = () => {
-    let body = {}
-    try {
-      body = JSON.parse(request.responseText)
-    } catch {
-      // Fall through to the generic error below.
-    }
-    if (request.status >= 200 && request.status < 300) {
-      resolve(body)
-    } else {
-      reject(new Error(body.error?.message || 'Unable to upload photo.'))
-    }
-  }
-  request.onerror = () => reject(new Error('Unable to reach the photo service. Please try again.'))
-  request.send(formData)
-})
 
 function GalleryTool({ apiBaseUrl, token, userRole, backendUserId }) {
   const [galleries, setGalleries] = useState([])
@@ -144,35 +118,9 @@ function GalleryTool({ apiBaseUrl, token, userRole, backendUserId }) {
     setUploadMessage('')
     setUploadProgress(0)
     try {
-      const signatureResponse = await fetch(`${apiBaseUrl}/api/v1/pictures/upload-signature`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (!signatureResponse.ok) {
-        const responseError = await signatureResponse.json().catch(() => ({}))
-        throw new Error(responseError.detail || 'Unable to upload photo.')
-      }
-      const { upload_url: uploadUrl, fields } = await signatureResponse.json()
+      const { upload_url: uploadUrl, fields } = await fetchUploadSignature(apiBaseUrl, token)
       const uploaded = await uploadToCloudinary(uploadUrl, fields, uploadFile, setUploadProgress)
-
-      const response = await fetch(`${apiBaseUrl}/api/v1/pictures`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          public_id: uploaded.public_id,
-          version: uploaded.version,
-          signature: uploaded.signature,
-          caption: uploadCaption.trim(),
-          gallery_id: selectedGallery,
-        }),
-      })
-      if (!response.ok) {
-        const responseError = await response.json().catch(() => ({}))
-        throw new Error(responseError.detail || 'Unable to upload photo.')
-      }
+      await confirmPicture(apiBaseUrl, token, uploaded, { caption: uploadCaption, galleryId: selectedGallery })
       setUploadFile(null)
       setUploadCaption('')
       setUploadMessage('Photo uploaded successfully.')

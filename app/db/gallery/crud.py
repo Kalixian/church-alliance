@@ -49,8 +49,30 @@ def get_default_gallery(db: Session) -> Gallery:
 
 
 def get_all_galleries(db: Session, skip: int = 0, limit: int = 100) -> list[Gallery]:
-    """Get all galleries."""
-    return db.query(Gallery).offset(skip).limit(limit).all()
+    """Get all galleries except those belonging to articles."""
+    return db.query(Gallery).filter(Gallery.article_id.is_(None)).offset(skip).limit(limit).all()
+
+
+def article_gallery_name(article_id: UUID) -> str:
+    """Internal name for an article's gallery: gallery names are unique but article titles are not."""
+    return f"article-{article_id}"
+
+
+def get_article_gallery(db: Session, article_id: UUID) -> Gallery | None:
+    """Return the gallery attached to an article, if it has one."""
+    return db.query(Gallery).filter(Gallery.article_id == article_id).first()
+
+
+def get_or_create_article_gallery(db: Session, article_id: UUID) -> Gallery:
+    """Return the article's gallery, creating it on first use."""
+    gallery = get_article_gallery(db, article_id)
+    if gallery:
+        return gallery
+    gallery = Gallery(name=article_gallery_name(article_id), article_id=article_id)
+    db.add(gallery)
+    db.commit()
+    db.refresh(gallery)
+    return gallery
 
 
 def update_gallery(db: Session, gallery_id: UUID, name: str | None = None) -> Gallery | None:
@@ -153,11 +175,7 @@ def get_all_pictures(
     gallery_id: UUID | None = None,
 ) -> list[Picture]:
     """Get pictures filtered by caption/gallery, newest first."""
-    query = db.query(Picture)
-    if search:
-        query = query.filter(Picture.caption.ilike(f"%{search}%"))
-    if gallery_id:
-        query = query.filter(Picture.gallery_id == gallery_id)
+    query = _filter_pictures(db.query(Picture), search, gallery_id)
     return query.order_by(Picture.uploaded_at.desc(), Picture.id.desc()).offset(skip).limit(limit).all()
 
 
@@ -167,17 +185,26 @@ def count_pictures(
     gallery_id: UUID | None = None,
 ) -> int:
     """Count pictures using the same filters as the paginated list."""
-    query = db.query(func.count(Picture.id))
+    return _filter_pictures(db.query(func.count(Picture.id)), search, gallery_id).scalar() or 0
+
+
+def _filter_pictures(query, search: str | None, gallery_id: UUID | None):
+    """Apply the caption/gallery filters. Without a gallery, pictures in article galleries are left out."""
     if search:
         query = query.filter(Picture.caption.ilike(f"%{search}%"))
     if gallery_id:
-        query = query.filter(Picture.gallery_id == gallery_id)
-    return query.scalar() or 0
+        return query.filter(Picture.gallery_id == gallery_id)
+    return query.join(Gallery, Picture.gallery_id == Gallery.id).filter(Gallery.article_id.is_(None))
 
 
 def get_pictures_by_gallery(db: Session, gallery_id: UUID) -> list[Picture]:
-    """Get all pictures for a gallery."""
-    return db.query(Picture).filter(Picture.gallery_id == gallery_id).all()
+    """Get all pictures for a gallery, oldest first."""
+    return (
+        db.query(Picture)
+        .filter(Picture.gallery_id == gallery_id)
+        .order_by(Picture.uploaded_at.asc(), Picture.created_at.asc())
+        .all()
+    )
 
 
 def update_picture(

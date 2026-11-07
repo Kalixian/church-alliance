@@ -55,11 +55,22 @@ def update_article(db: Session, article_id: UUID, article_update: ArticleUpdate)
     return db_article
 
 
-def delete_article(db: Session, article_id: UUID) -> bool:
+def delete_article(db: Session, article_id: UUID) -> list[str] | None:
+    """Delete an article with its gallery and pictures.
+
+    Returns the deleted pictures' storage IDs for the caller to clean up, or None if not found.
+    """
     db_article = get_article_by_id(db, article_id)
     if not db_article:
-        return False
+        return None
 
+    public_ids = []
+    if db_article.gallery:
+        public_ids = [
+            picture.cloudinary_public_id
+            for picture in db_article.gallery.pictures
+            if picture.cloudinary_public_id
+        ]
     db.delete(db_article)
     db.commit()
-    return True
+    return public_ids

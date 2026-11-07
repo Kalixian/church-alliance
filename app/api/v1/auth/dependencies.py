@@ -21,6 +21,8 @@ from sqlalchemy.orm import Session
 
 
 MANAGER_ROLES = frozenset({UserRole.ADMINISTRATOR, UserRole.COORDINATOR})
+# Roles that may write news articles. Coordinators manage only their own; administrators manage all.
+ARTICLE_AUTHOR_ROLES = MANAGER_ROLES
 
 
 def _credentials_exception() -> HTTPException:
@@ -176,4 +178,17 @@ def ensure_owner_or_role(
 ) -> None:
     """Raise 403 unless the user owns the resource or holds one of the given roles."""
     if not is_owner_or_role(user, owner_id, roles):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
+
+
+def can_manage_article(user: UserResponse, creator_id: UUID | None) -> bool:
+    """Administrators manage every article; coordinators only the ones they wrote. Covers the article's photos."""
+    if user.role == UserRole.ADMINISTRATOR:
+        return True
+    return user.role in ARTICLE_AUTHOR_ROLES and creator_id is not None and creator_id == user.id
+
+
+def ensure_can_manage_article(user: UserResponse, creator_id: UUID | None, detail: str) -> None:
+    """Raise 403 unless can_manage_article allows it."""
+    if not can_manage_article(user, creator_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)

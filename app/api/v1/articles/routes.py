@@ -1,22 +1,29 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.api.v1.auth.dependencies import ensure_owner_or_role, get_current_user, require_confirmed
+from app.api.v1.auth.dependencies import (
+    ARTICLE_AUTHOR_ROLES,
+    allow_roles,
+    ensure_can_manage_article,
+    get_current_user,
+)
 from app.db.article import (
     ArticleCreate,
     ArticleResponse,
     ArticleUpdate,
     create_article,
-    delete_article,
     get_all_articles,
     get_article_by_id,
     update_article,
 )
 from app.db.database import get_db
+from app.db.gallery import GalleryResponse, get_or_create_article_gallery
 from app.db.user import UserResponse
+from app.services.pictures import remove_article
+from app.storage import ImageStorage, get_image_storage
 
 router = APIRouter(prefix="/articles", tags=["articles"])
 
@@ -31,7 +38,7 @@ def _parse_article_id(article_id: str) -> UUID:
 @router.post("", response_model=ArticleResponse, status_code=status.HTTP_201_CREATED)
 def create_article_route(
     article: ArticleCreate,
-    current_user: Annotated[UserResponse, Depends(require_confirmed("Applicants cannot create articles"))],
+    current_user: Annotated[UserResponse, Depends(allow_roles(*ARTICLE_AUTHOR_ROLES, detail="Only coordinators and administrators can create articles"))],
     db: Session = Depends(get_db),
 ):
     return create_article(db, article, current_user.id)
@@ -65,7 +72,7 @@ def update_article_route(
     article = get_article_by_id(db, parsed_id)
     if not article:
         raise HTTPException(status_code=404, detail="Article not found")
-    ensure_owner_or_role(current_user, article.creator_id, "You can only update your own articles")
+    ensure_can_manage_article(current_user, article.creator_id, "You can only update your own articles")
     return update_article(db, parsed_id, article_update)
 
 
@@ -73,12 +80,29 @@ def update_article_route(
 def delete_article_route(
     article_id: str,
     current_user: Annotated[UserResponse, Depends(get_current_user)],
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
+    storage: ImageStorage = Depends(get_image_storage),
 ):
     parsed_id = _parse_article_id(article_id)
     article = get_article_by_id(db, parsed_id)
     if not article:
         raise HTTPException(status_code=404, detail="Article not found")
-    ensure_owner_or_role(current_user, article.creator_id, "You can only delete your own articles")
-    delete_article(db, parsed_id)
+    ensure_can_manage_article(current_user, article.creator_id, "You can only delete your own articles")
+    remove_article(db, storage, background_tasks, parsed_id)
     return None
+
+
+@router.put("/{article_id}/gallery", response_model=GalleryResponse)
+def ensure_article_gallery_route(
+    article_id: str,
+    current_user: Annotated[UserResponse, Depends(get_current_user)],
+    db: Session = Depends(get_db),
+):
+    """Return the article's photo gallery, creating it if needed. Upload into it with POST /pictures."""
+    parsed_id = _parse_article_id(article_id)
+    article = get_article_by_id(db, parsed_id)
+    if not article:
+        raise HTTPException(status_code=404, detail="Article not found")
+    ensure_can_manage_article(current_user, article.creator_id, "You can only add photos to your own articles")
+    return get_or_create_article_gallery(db, parsed_id)

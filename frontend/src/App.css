@@ -220,6 +220,140 @@
   outline: none;
 }
 
+.article-photo-dropzone {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 2px dashed var(--field-border);
+  border-radius: 0.5rem;
+  background: var(--paper);
+  color: var(--ink-soft);
+  font-weight: 400;
+}
+
+.article-photo-dropzone.is-dragging {
+  border-color: var(--red);
+  background: var(--red-tint);
+}
+
+.article-photo-rejected {
+  margin: 0;
+  padding-left: 1.25rem;
+  font-weight: 400;
+}
+
+.article-photo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-weight: 400;
+}
+
+.article-photo-card {
+  display: grid;
+  gap: 0.4rem;
+  min-width: 0;
+  padding: 0.4rem;
+  border: 1px solid var(--rule);
+  border-radius: 0.5rem;
+  background: #fff;
+}
+
+.article-photo-card img,
+.article-photo-card .missing-image {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 0.3rem;
+  background: var(--paper-alt);
+}
+
+.article-photo-queued img,
+.article-photo-uploading img {
+  opacity: 0.7;
+}
+
+.article-photo-error {
+  border-color: var(--red);
+}
+
+.article-editor .article-photo-card input {
+  padding: 0.4rem 0.5rem;
+  font-size: 0.9rem;
+}
+
+.article-photo-progress {
+  width: 100%;
+  accent-color: var(--red);
+}
+
+.article-photo-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+}
+
+.article-photo-status {
+  min-width: 0;
+  color: var(--ink-soft);
+  overflow-wrap: anywhere;
+}
+
+.article-photo-error .article-photo-status {
+  color: var(--red);
+}
+
+.danger-link {
+  flex-shrink: 0;
+  border: 0;
+  padding: 0.2rem 0;
+  background: none;
+  color: var(--red);
+  cursor: pointer;
+  font: inherit;
+  text-decoration: underline;
+}
+
+.danger-link:disabled {
+  color: var(--ink-soft);
+  cursor: not-allowed;
+}
+
+.article-photos {
+  margin-top: 1.5rem;
+}
+
+.article-photos h3 {
+  margin: 0 0 0.75rem;
+  color: var(--ink);
+}
+
+.article-lightbox-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+  color: var(--ink-soft);
+}
+
+.article-lightbox-nav button {
+  border: 1px solid var(--field-border);
+  border-radius: 0.35rem;
+  padding: 0.35rem 0.75rem;
+  background: #fff;
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+}
+
 .management-tool-link {
   width: 100%;
   border: 1px solid var(--field-border);

@@ -36,10 +36,21 @@ class Gallery(Base):
         onupdate=func.now(),
         nullable=False,
     )
+    # Set for a gallery that belongs to a news article. Such galleries are managed through the article
+    # and kept out of the main gallery listings.
+    article_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("articles.id"),
+        nullable=True,
+        unique=True,
+        index=True,
+    )
 
     __table_args__ = (
         Index("idx_gallery_name", "name"),
     )
+
+    article = relationship("Article", back_populates="gallery")
 
     pictures = relationship(
         "Picture",

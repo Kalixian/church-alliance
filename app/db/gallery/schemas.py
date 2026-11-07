@@ -24,6 +24,7 @@ class GalleryResponse(GalleryBase):
     created_at: datetime
     updated_at: datetime
     picture_count: int
+    article_id: Optional[UUID] = None
 
     model_config = ConfigDict(from_attributes=True)
 

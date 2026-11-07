@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import ArticleEditor from './ArticleEditor'
+import { ArticlePhotoGallery } from './ArticlePhotos'
 
 const PAGE_SIZE = 10
 
@@ -57,7 +58,7 @@ function ArticlesTool({ apiBaseUrl, token, userRole, backendUserId }) {
   const [error, setError] = useState('')
   const [refreshKey, setRefreshKey] = useState(0)
 
-  const canCreate = Boolean(token) && userRole !== 'applicant'
+  const canCreate = Boolean(token) && (userRole === 'administrator' || userRole === 'coordinator')
   const canManage = (article) => Boolean(token) && (
     userRole === 'administrator' || (userRole === 'coordinator' && article.creator_id === backendUserId)
   )
@@ -134,6 +135,7 @@ function ArticlesTool({ apiBaseUrl, token, userRole, backendUserId }) {
         <h2 id="article-detail-title">{selectedArticle.title}</h2>
         <div className="article-meta">{formatArticleDate(selectedArticle.created_at)} <span aria-hidden="true">/</span> {creatorName(selectedArticle.creator)}</div>
         <ArticleContent content={selectedArticle.content} />
+        {selectedArticle.gallery_id ? <ArticlePhotoGallery apiBaseUrl={apiBaseUrl} galleryId={selectedArticle.gallery_id} /> : null}
       </section>
     )
   }

@@ -28,3 +28,14 @@ class Article(Base):
     )
 
     creator = relationship("User", back_populates="articles")
+    gallery = relationship(
+        "Gallery",
+        back_populates="article",
+        uselist=False,
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+    @property
+    def gallery_id(self):
+        return self.gallery.id if self.gallery else None

@@ -16,6 +16,7 @@ def create_tables():
     _migrate_user_profile_columns()
     _migrate_event_schedule_columns()
     _migrate_picture_storage_columns()
+    _migrate_gallery_article_column()
     db = SessionLocal()
     try:
         create_default_gallery(db)
@@ -75,6 +76,23 @@ def _migrate_picture_storage_columns():
         for column_name, column_type in missing_columns.items():
             if column_name not in existing_columns:
                 connection.execute(text(f"ALTER TABLE pictures ADD COLUMN {column_name} {column_type}"))
+
+
+def _migrate_gallery_article_column():
+    """Link galleries to articles in databases created before article galleries were supported."""
+    inspector = inspect(engine)
+    if "galleries" not in inspector.get_table_names():
+        return
+
+    existing_columns = {column["name"] for column in inspector.get_columns("galleries")}
+    if "article_id" in existing_columns:
+        return
+
+    with engine.begin() as connection:
+        connection.execute(text("ALTER TABLE galleries ADD COLUMN article_id UUID REFERENCES articles(id)"))
+        connection.execute(
+            text("CREATE UNIQUE INDEX IF NOT EXISTS ix_galleries_article_id ON galleries (article_id)")
+        )
 
 
 __all__ = [
