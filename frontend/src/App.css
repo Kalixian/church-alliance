@@ -1554,3 +1554,125 @@ a.management-tool-link {
 .gallery-lightbox-content .article-lightbox-caption {
   text-align: center;
 }
+
+/* ---------- Home: Recent Activity ---------- */
+
+/* Sits close under the hero rather than a full band's distance away. */
+.hero:has(+ .recent-activity-band) {
+  padding-bottom: clamp(1.5rem, 4vw, 2.5rem);
+}
+
+.recent-activity-band {
+  padding-top: 0;
+  padding-bottom: clamp(1.75rem, 4vw, 2.75rem);
+}
+
+.recent-activity-band .band__heading {
+  margin-bottom: clamp(1rem, 2.5vw, 1.5rem);
+}
+
+
+.recent-activity {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  gap: clamp(1rem, 2.5vw, 1.75rem);
+  margin: 0 0 clamp(1.5rem, 3vw, 2rem);
+  padding: 0;
+  list-style: none;
+}
+
+.recent-activity > li {
+  display: flex;
+  min-width: 0;
+}
+
+.recent-activity__item {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  box-shadow: 0 6px 24px rgba(29, 29, 31, 0.06);
+  color: var(--ink);
+  text-decoration: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.recent-activity__item:hover,
+.recent-activity__item:focus-visible {
+  border-color: var(--red);
+  box-shadow: 0 8px 28px rgba(29, 29, 31, 0.12);
+  color: var(--ink);
+}
+
+/* Fills the card's full height on the left, beside the date, title and summary. */
+.recent-activity__photo {
+  flex: 0 0 23%;
+  align-self: stretch;
+  width: 23%;
+  min-height: 5.4rem;
+  object-fit: cover;
+  background: var(--paper-alt);
+}
+
+.recent-activity__body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-width: 0;
+  padding: clamp(1rem, 2.5vw, 1.35rem);
+}
+
+.recent-activity__body h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1.15rem;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.recent-activity__item:hover h3,
+.recent-activity__item:focus-visible h3 {
+  color: var(--red-dark);
+}
+
+.recent-activity__date {
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.recent-activity__summary {
+  margin: 0;
+  color: var(--ink-soft);
+  line-height: 1.6;
+  white-space: pre-line;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  overflow: hidden;
+}
+
+/* ---------- Home: "At a glance" stats ---------- */
+
+.stats-band {
+  padding-top: clamp(1.25rem, 3vw, 2rem);
+  padding-bottom: clamp(1.25rem, 3vw, 2rem);
+}
+
+.stats-band + .band {
+  padding-top: clamp(2rem, 4.5vw, 3.25rem);
+}
+
+.stats-band .stats {
+  gap: 1rem;
+}
+
+.stats-band .stats li {
+  padding: 0.75rem 1.1rem;
+}

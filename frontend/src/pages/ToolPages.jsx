@@ -80,10 +80,20 @@ export function CalendarPage() {
 
 export function NewsPage() {
   const { apiBaseUrl, token, userRole, backendUserId } = useAuth()
+  const { articleId } = useParams()
+  const navigate = useNavigate()
 
   return (
     <ToolPage eyebrow="Updates and stories" title="News">
-      <ArticlesTool apiBaseUrl={apiBaseUrl} token={token} userRole={userRole} backendUserId={backendUserId} />
+      <ArticlesTool
+        apiBaseUrl={apiBaseUrl}
+        token={token}
+        userRole={userRole}
+        backendUserId={backendUserId}
+        articleId={articleId}
+        onOpenArticle={(id) => navigate(`/news/${id}`)}
+        onCloseArticle={() => navigate('/news')}
+      />
     </ToolPage>
   )
 }

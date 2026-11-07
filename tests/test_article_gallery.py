@@ -181,3 +181,16 @@ def test_migration_adds_article_column_to_old_galleries_table(monkeypatch):
     inspector = inspect(old_engine)
     assert "article_id" in {column["name"] for column in inspector.get_columns("galleries")}
     assert any(index["unique"] and index["column_names"] == ["article_id"] for index in inspector.get_indexes("galleries"))
+
+
+def test_article_cover_is_its_first_photo(client, db_session, image_storage):
+    _, author, _, _ = setup_users(db_session)
+    article = create_article(client, author)
+    assert article["cover_url"] is None
+
+    gallery_id = ensure_gallery(client, author, article["id"]).json()["id"]
+    upload(client, author, image_storage, gallery_id, "church-alliance/pictures/cover-first")
+    upload(client, author, image_storage, gallery_id, "church-alliance/pictures/cover-second")
+
+    listed = client.get("/api/v1/articles", params={"limit": 3}).json()
+    assert listed[0]["cover_url"] == "https://images.example.test/v1/church-alliance/pictures/cover-first"

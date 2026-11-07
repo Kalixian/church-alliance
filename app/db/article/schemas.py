@@ -123,6 +123,7 @@ class ArticleResponse(ArticleBase):
     creator_id: UUID
     creator: UserResponse
     gallery_id: UUID | None = None
+    cover_url: str | None = None
     created_at: datetime
     updated_at: datetime
 

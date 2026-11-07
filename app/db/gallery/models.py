@@ -56,6 +56,7 @@ class Gallery(Base):
         "Picture",
         back_populates="gallery",
         cascade="all, delete-orphan",
+        order_by="(Picture.uploaded_at, Picture.created_at)",
     )
 
     @property

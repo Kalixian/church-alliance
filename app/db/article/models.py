@@ -39,3 +39,10 @@ class Article(Base):
     @property
     def gallery_id(self):
         return self.gallery.id if self.gallery else None
+
+    @property
+    def cover_url(self) -> str | None:
+        """URL of the article's first photo, used as its thumbnail in listings."""
+        if not self.gallery:
+            return None
+        return next((picture.url for picture in self.gallery.pictures if picture.url), None)

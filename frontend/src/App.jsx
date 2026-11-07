@@ -30,6 +30,7 @@ function App() {
           <Route path="courses" element={<CoursesPage />} />
           <Route path="contact" element={<ContactPage />} />
           <Route path="news" element={<NewsPage />} />
+          <Route path="news/:articleId" element={<NewsPage />} />
           {/* Hidden pages fall through to the catch-all redirect below. */}
           {isPageVisible('/events') ? (
             <>

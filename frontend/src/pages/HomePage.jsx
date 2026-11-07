@@ -1,7 +1,11 @@
 import { Link } from 'react-router'
 import logo from '../assets/logo_600.jpeg'
+import { useAuth } from '../auth/authContext'
+import RecentActivity from '../components/RecentActivity'
 
 function HomePage() {
+  const { apiBaseUrl } = useAuth()
+
   return (
     <>
       <section className="hero" aria-labelledby="hero-title">
@@ -28,7 +32,9 @@ function HomePage() {
         </div>
       </section>
 
-      <section className="band band--alt" aria-label="At a glance">
+      <RecentActivity apiBaseUrl={apiBaseUrl} />
+
+      <section className="band band--alt stats-band" aria-label="At a glance">
         <ul className="stats">
           <li><strong>2023</strong> Alliance founded in October</li>
           <li><strong>27</strong> Member churches as of September 2025</li>

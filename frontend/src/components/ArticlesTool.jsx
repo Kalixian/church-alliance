@@ -50,14 +50,18 @@ function ArticleChildren({ nodes }) {
   })
 }
 
-function ArticlesTool({ apiBaseUrl, token, userRole, backendUserId }) {
+// `articleId` comes from the URL (/news/:articleId); the page owns navigation via the callbacks.
+function ArticlesTool({ apiBaseUrl, token, userRole, backendUserId, articleId, onOpenArticle, onCloseArticle }) {
   const [articles, setArticles] = useState([])
   const [page, setPage] = useState(0)
-  const [selectedArticle, setSelectedArticle] = useState(null)
-  const [isEditorVisible, setIsEditorVisible] = useState(false)
+  const [loadedArticle, setLoadedArticle] = useState(null)
+  const [articleError, setArticleError] = useState(null) // { id, message } for the URL's article
+  const [editorMode, setEditorMode] = useState(null) // null, 'create' or 'edit'
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
   const [refreshKey, setRefreshKey] = useState(0)
+
+  const selectedArticle = articleId && loadedArticle?.id === articleId ? loadedArticle : null
 
   const canCreate = Boolean(token) && (userRole === 'administrator' || userRole === 'coordinator')
   const canManage = (article) => Boolean(token) && (
@@ -79,15 +83,28 @@ function ArticlesTool({ apiBaseUrl, token, userRole, backendUserId }) {
       .finally(() => setIsLoading(false))
   }, [apiBaseUrl, page, refreshKey])
 
-  const openCreate = () => {
-    setSelectedArticle(null)
-    setIsEditorVisible(true)
+  // Opening /news/:articleId directly (e.g. from the Home page) loads that article.
+  useEffect(() => {
+    if (!articleId || loadedArticle?.id === articleId) return
+    fetch(`${apiBaseUrl}/api/v1/articles/${articleId}`)
+      .then(async (response) => {
+        if (!response.ok) throw new Error(response.status === 404 ? 'This article could not be found.' : 'Unable to load the article.')
+        return response.json()
+      })
+      .then(setLoadedArticle)
+      .catch((loadError) => setArticleError({ id: articleId, message: loadError.message }))
+  }, [apiBaseUrl, articleId, loadedArticle])
+
+  const openArticle = (article) => {
+    setLoadedArticle(article)
+    onOpenArticle(article.id)
   }
 
   const handleSaved = (article) => {
-    setSelectedArticle(article)
-    setIsEditorVisible(false)
+    setLoadedArticle(article)
+    setEditorMode(null)
     setRefreshKey((key) => key + 1)
+    if (article.id !== articleId) onOpenArticle(article.id)
   }
 
   // Called from the editor, which confirms first and shows any error thrown here.
@@ -100,21 +117,34 @@ function ArticlesTool({ apiBaseUrl, token, userRole, backendUserId }) {
       const responseError = await response.json().catch(() => ({}))
       throw new Error(responseError.detail || 'Unable to delete article.')
     }
-    setIsEditorVisible(false)
-    setSelectedArticle(null)
+    setEditorMode(null)
+    setLoadedArticle(null)
     setRefreshKey((key) => key + 1)
+    onCloseArticle()
   }
 
-  if (isEditorVisible) {
+  if (editorMode) {
     return (
       <ArticleEditor
-        article={selectedArticle}
+        article={editorMode === 'edit' ? selectedArticle : null}
         apiBaseUrl={apiBaseUrl}
         token={token}
         onSaved={handleSaved}
         onDelete={handleDelete}
-        onCancel={() => setIsEditorVisible(false)}
+        onCancel={() => setEditorMode(null)}
       />
+    )
+  }
+
+  if (articleId && !selectedArticle) {
+    const message = articleError?.id === articleId ? articleError.message : ''
+    return (
+      <section className="article-detail">
+        <div className="article-detail-actions">
+          <button type="button" className="secondary-button" onClick={onCloseArticle}>Back to News</button>
+        </div>
+        <p className={`gallery-message${message ? ' gallery-error' : ''}`}>{message || 'Loading article...'}</p>
+      </section>
     )
   }
 
@@ -122,7 +152,7 @@ function ArticlesTool({ apiBaseUrl, token, userRole, backendUserId }) {
     return (
       <section className="article-detail" aria-labelledby="article-detail-title">
         <div className="article-detail-actions">
-          <button type="button" className="secondary-button" onClick={() => setSelectedArticle(null)}>Back to News</button>
+          <button type="button" className="secondary-button" onClick={onCloseArticle}>Back to News</button>
         </div>
         <p className="section-kicker">News</p>
         <div className="article-detail-title-row">
@@ -131,7 +161,7 @@ function ArticlesTool({ apiBaseUrl, token, userRole, backendUserId }) {
             <button
               type="button"
               className="course-edit-button"
-              onClick={() => setIsEditorVisible(true)}
+              onClick={() => setEditorMode('edit')}
               aria-label={`Edit ${selectedArticle.title}`}
               title="Edit article"
             >
@@ -152,7 +182,7 @@ function ArticlesTool({ apiBaseUrl, token, userRole, backendUserId }) {
         <div>
           <h2 id="news-title" className="sr-only">News</h2>
         </div>
-        {canCreate ? <button type="button" className="new-event-button" onClick={openCreate}>+ Add article</button> : null}
+        {canCreate ? <button type="button" className="new-event-button" onClick={() => setEditorMode('create')}>+ Add article</button> : null}
       </div>
       {error ? <p className="gallery-message gallery-error">{error}</p> : null}
       {isLoading ? <p className="gallery-message">Loading articles...</p> : null}
@@ -160,7 +190,7 @@ function ArticlesTool({ apiBaseUrl, token, userRole, backendUserId }) {
       {!isLoading && articles.length > 0 ? (
         <div className="article-list">
           {articles.map((article) => (
-            <button type="button" className="article-list-item" key={article.id} onClick={() => setSelectedArticle(article)}>
+            <button type="button" className="article-list-item" key={article.id} onClick={() => openArticle(article)}>
               <span className="article-list-date">{formatArticleDate(article.created_at)}</span>
               <span className="article-list-title">{article.title}</span>
               <span className="article-list-summary">{article.summary}</span>
