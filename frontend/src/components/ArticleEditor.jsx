@@ -77,7 +77,7 @@ const responseError = async (response, fallback) => {
   return new Error(body.detail || fallback)
 }
 
-function ArticleEditor({ article, apiBaseUrl, token, onSaved, onCancel }) {
+function ArticleEditor({ article, apiBaseUrl, token, onSaved, onDelete, onCancel }) {
   const editor = useMemo(() => withHistory(withReact(createEditor())), [])
   const initialContent = useMemo(() => serializeValue(article?.content), [article])
   const contentRef = useRef(initialContent)
@@ -181,6 +181,18 @@ function ArticleEditor({ article, apiBaseUrl, token, onSaved, onCancel }) {
     }
   }
 
+  const remove = async () => {
+    if (!window.confirm('Delete this article and its photos? This cannot be undone.')) return
+    setIsSaving(true)
+    setError('')
+    try {
+      await onDelete(savedArticle.id)
+    } catch (deleteError) {
+      setError(deleteError.message || 'Unable to delete article.')
+      setIsSaving(false)
+    }
+  }
+
   // If the article was saved while photos were failing, leaving should still show the saved version.
   const leave = () => (savedArticle && savedArticle !== article ? onSaved(savedArticle) : onCancel())
 
@@ -247,6 +259,11 @@ function ArticleEditor({ article, apiBaseUrl, token, onSaved, onCancel }) {
         <button type="button" className="secondary-button" onClick={leave} disabled={isSaving}>
           {hasFailedUploads ? 'Continue without them' : 'Cancel'}
         </button>
+        {savedArticle && onDelete ? (
+          <button type="button" className="danger-button article-editor-delete" onClick={remove} disabled={isSaving}>
+            Delete article
+          </button>
+        ) : null}
       </div>
     </form>
   )

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import ArticleEditor from './ArticleEditor'
 import { ArticlePhotoGallery } from './ArticlePhotos'
+import PencilIcon from './icons/PencilIcon'
 
 const PAGE_SIZE = 10
 
@@ -89,22 +90,19 @@ function ArticlesTool({ apiBaseUrl, token, userRole, backendUserId }) {
     setRefreshKey((key) => key + 1)
   }
 
-  const handleDelete = async () => {
-    if (!selectedArticle || !window.confirm('Delete this article? This action cannot be undone.')) return
-    try {
-      const response = await fetch(`${apiBaseUrl}/api/v1/articles/${selectedArticle.id}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (!response.ok) {
-        const responseError = await response.json().catch(() => ({}))
-        throw new Error(responseError.detail || 'Unable to delete article.')
-      }
-      setSelectedArticle(null)
-      setRefreshKey((key) => key + 1)
-    } catch (deleteError) {
-      setError(deleteError.message || 'Unable to delete article.')
+  // Called from the editor, which confirms first and shows any error thrown here.
+  const handleDelete = async (articleId) => {
+    const response = await fetch(`${apiBaseUrl}/api/v1/articles/${articleId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (!response.ok) {
+      const responseError = await response.json().catch(() => ({}))
+      throw new Error(responseError.detail || 'Unable to delete article.')
     }
+    setIsEditorVisible(false)
+    setSelectedArticle(null)
+    setRefreshKey((key) => key + 1)
   }
 
   if (isEditorVisible) {
@@ -114,6 +112,7 @@ function ArticlesTool({ apiBaseUrl, token, userRole, backendUserId }) {
         apiBaseUrl={apiBaseUrl}
         token={token}
         onSaved={handleSaved}
+        onDelete={handleDelete}
         onCancel={() => setIsEditorVisible(false)}
       />
     )
@@ -124,15 +123,22 @@ function ArticlesTool({ apiBaseUrl, token, userRole, backendUserId }) {
       <section className="article-detail" aria-labelledby="article-detail-title">
         <div className="article-detail-actions">
           <button type="button" className="secondary-button" onClick={() => setSelectedArticle(null)}>Back to News</button>
-          {canManage(selectedArticle) ? (
-            <div className="form-actions">
-              <button type="button" onClick={() => setIsEditorVisible(true)}>Edit article</button>
-              <button type="button" className="danger-button" onClick={handleDelete}>Delete article</button>
-            </div>
-          ) : null}
         </div>
         <p className="section-kicker">News</p>
-        <h2 id="article-detail-title">{selectedArticle.title}</h2>
+        <div className="article-detail-title-row">
+          <h2 id="article-detail-title">{selectedArticle.title}</h2>
+          {canManage(selectedArticle) ? (
+            <button
+              type="button"
+              className="course-edit-button"
+              onClick={() => setIsEditorVisible(true)}
+              aria-label={`Edit ${selectedArticle.title}`}
+              title="Edit article"
+            >
+              <PencilIcon />
+            </button>
+          ) : null}
+        </div>
         <div className="article-meta">{formatArticleDate(selectedArticle.created_at)} <span aria-hidden="true">/</span> {creatorName(selectedArticle.creator)}</div>
         <ArticleContent content={selectedArticle.content} />
         {selectedArticle.gallery_id ? <ArticlePhotoGallery apiBaseUrl={apiBaseUrl} galleryId={selectedArticle.gallery_id} /> : null}
