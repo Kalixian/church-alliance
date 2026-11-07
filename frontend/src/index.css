@@ -1,9 +1,9 @@
 /* Church Alliance: foundation shared with the static site (static/styles.css). */
 
 :root {
-  --red: #c8102e;
-  --red-dark: #9b0c23;
-  --red-tint: #fdf1f3;
+  --red: #b02a3e;
+  --red-dark: #8c2232;
+  --red-tint: #faf3f4;
   --ink: #1d1d1f;
   --ink-soft: #4a4a4f;
   --rule: #e6e2e3;
@@ -83,8 +83,8 @@ p {
 }
 
 :root {
-  --red-soft: #f0b3bd;
-  --red-tint-strong: #fbe3e7;
+  --red-soft: #e3bcc2;
+  --red-tint-strong: #f5e5e8;
   --field-border: #c9c4c5;
   --ok: #2e7d32;
   --ok-tint: #eaf6ec;

@@ -875,7 +875,7 @@
 .event-card:hover,
 .event-card:focus-visible {
   border-color: var(--red);
-  box-shadow: 0 10px 22px rgba(200, 16, 46, 0.12);
+  box-shadow: 0 10px 22px rgba(176, 42, 62, 0.12);
   outline: none;
 }
 
@@ -1298,7 +1298,7 @@
 .article-rich-text-editor:focus-within {
   outline: none;
   border-color: var(--red);
-  box-shadow: 0 0 0 3px rgba(200, 16, 46, 0.2);
+  box-shadow: 0 0 0 3px rgba(176, 42, 62, 0.2);
 }
 
 input[type="checkbox"],

@@ -460,7 +460,7 @@
 .field textarea:focus {
   outline: none;
   border-color: var(--red);
-  box-shadow: 0 0 0 3px rgba(200, 16, 46, 0.2);
+  box-shadow: 0 0 0 3px rgba(176, 42, 62, 0.2);
 }
 
 .contact-form .button {
@@ -560,7 +560,7 @@
 }
 
 .site-footer a:hover {
-  color: #ff8a9b;
+  color: #eba3ae;
   text-decoration: underline;
 }
 
