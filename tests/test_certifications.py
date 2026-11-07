@@ -73,3 +73,28 @@ def test_member_cannot_manage_certifications(client, db_session):
     assert list_response.status_code == 200
     assert create_response.status_code == 403
     assert delete_response.status_code == 403
+
+def test_seed_courses_is_idempotent_and_keeps_edits(db_session):
+    from app.db.certification import get_certification_by_name
+    from app.db.certification.seed import COURSES, seed_courses
+
+    assert len(seed_courses(db_session)) == len(COURSES)
+
+    cpr = get_certification_by_name(db_session, "CPR")
+    cpr.description = "Edited by an admin."
+    db_session.commit()
+
+    assert seed_courses(db_session) == []
+    assert db_session.query(Certification).count() == len(COURSES)
+    assert get_certification_by_name(db_session, "CPR").description == "Edited by an admin."
+
+
+def test_courses_are_public(client, db_session):
+    from app.db.certification.seed import seed_courses
+
+    seed_courses(db_session)
+
+    response = client.get("/api/v1/certifications")
+
+    assert response.status_code == 200
+    assert "CPR" in [course["name"] for course in response.json()]

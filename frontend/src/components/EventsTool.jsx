@@ -334,9 +334,9 @@ function EventsTool({ apiBaseUrl, token, userRole, authUserId, onSelectEvent }) 
             </select>
           </label>
           <label>
-            <span>Certification (optional)</span>
+            <span>Course (optional)</span>
             <select value={newEventCertificationId} onChange={(event) => setNewEventCertificationId(event.target.value)}>
-              <option value="">No certification</option>
+              <option value="">No course</option>
               {certifications.map((certification) => (
                 <option key={certification.id} value={certification.id}>{certification.name}</option>
               ))}
@@ -373,7 +373,7 @@ function EventsTool({ apiBaseUrl, token, userRole, authUserId, onSelectEvent }) 
           </div>
           <div className="events-controls-second-row">
             <label className="event-certification-field">
-              <span>Search by certification</span>
+              <span>Search by course</span>
               <select
                 value={certificationId}
                 onChange={(event) => {
@@ -381,7 +381,7 @@ function EventsTool({ apiBaseUrl, token, userRole, authUserId, onSelectEvent }) 
                   setPage(0)
                 }}
               >
-                <option value="">All certifications</option>
+                <option value="">All courses</option>
                 {certifications.map((certification) => (
                   <option key={certification.id} value={certification.id}>{certification.name}</option>
                 ))}

@@ -74,7 +74,7 @@ function EventEditor({ event, apiBaseUrl, token, certifications, coordinators, o
         <label><span>{allDay ? 'End date' : 'Ends'}</span><input type={allDay ? 'date' : 'datetime-local'} value={end} onChange={(e) => setEnd(e.target.value)} required /></label>
       </div>
       <label><span>Coordinator</span><select value={coordinatorId} onChange={(e) => setCoordinatorId(e.target.value)} required>{coordinators.map((coordinator) => <option key={coordinator.id} value={coordinator.id}>{coordinator.first_name || coordinator.last_name ? `${coordinator.first_name || ''} ${coordinator.last_name || ''}`.trim() : coordinator.email} ({coordinator.role})</option>)}</select></label>
-      <label><span>Certification (optional)</span><select value={certificationId} onChange={(e) => setCertificationId(e.target.value)}><option value="">No certification</option>{certifications.map((certification) => <option key={certification.id} value={certification.id}>{certification.name}</option>)}</select></label>
+      <label><span>Course (optional)</span><select value={certificationId} onChange={(e) => setCertificationId(e.target.value)}><option value="">No course</option>{certifications.map((certification) => <option key={certification.id} value={certification.id}>{certification.name}</option>)}</select></label>
       <div className="form-actions"><button type="submit" disabled={isSaving}>{isSaving ? 'Saving...' : 'Save Event'}</button><button type="button" className="secondary-button" onClick={onCancel}>Cancel</button></div>
     </form>
   )

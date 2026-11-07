@@ -5,7 +5,6 @@ import { useAuth } from '../auth/authContext'
 import ApplicationsTool from '../components/ApplicationsTool'
 import ArticlesTool from '../components/ArticlesTool'
 import CalendarTool from '../components/CalendarTool'
-import CertificationsTool from '../components/CertificationsTool'
 import EventDetails from '../components/EventDetails'
 import EventsTool from '../components/EventsTool'
 import GalleryTool from '../components/GalleryTool'
@@ -105,17 +104,6 @@ export function MembersPage() {
   return (
     <ToolPage eyebrow="Members area" title="Members">
       <MembersTool token={token} authUserId={authUserId} apiBaseUrl={apiBaseUrl} canEditRoles={isAdmin} />
-    </ToolPage>
-  )
-}
-
-export function CertificationsPage() {
-  const { apiBaseUrl, token } = useAuth()
-  const navigate = useNavigate()
-
-  return (
-    <ToolPage eyebrow="Admin" title="Certifications">
-      <CertificationsTool token={token} apiBaseUrl={apiBaseUrl} onBack={() => navigate('/admin')} />
     </ToolPage>
   )
 }

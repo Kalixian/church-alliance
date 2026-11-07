@@ -816,33 +816,6 @@
   }
 }
 
-.certification-form {
-  display: grid;
-  gap: 0.75rem;
-  margin-top: 1rem;
-}
-
-.certification-form h3 {
-  margin: 0;
-}
-
-.certification-form label {
-  display: grid;
-  gap: 0.35rem;
-  color: var(--ink);
-  font-weight: 600;
-}
-
-.certification-form input,
-.certification-form textarea {
-  border: 1px solid var(--field-border);
-  border-radius: 0.5rem;
-  padding: 0.65rem 0.75rem;
-  background: #fff;
-  color: var(--ink);
-  font: inherit;
-}
-
 .form-actions {
   display: flex;
   flex-wrap: wrap;
@@ -871,39 +844,20 @@
   color: var(--ink);
 }
 
-.certification-list {
-  display: grid;
-  gap: 0.75rem;
-  margin-top: 1rem;
-}
-
-.certification-row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
+/* Course management on the Courses page (coordinators and administrators). */
+.course-form {
+  gap: 1.1rem;
   margin: 0;
 }
 
-.certification-row .form-actions {
-  flex-shrink: 0;
-  flex-wrap: nowrap;
-  gap: 0.4rem;
+.course-form h3 {
+  margin: 0;
 }
 
-.certification-row .form-actions button {
-  padding: 0.4rem 0.6rem;
+.field-hint {
+  color: var(--ink-soft);
   font-size: 0.85rem;
-  white-space: nowrap;
-}
-
-.certification-row h3,
-.certification-row p {
-  margin: 0;
-}
-
-.certification-row p {
-  margin-top: 0.35rem;
+  font-weight: 400;
 }
 
 .events-list {
@@ -1376,4 +1330,75 @@ a.management-tool-link {
   box-sizing: border-box;
   color: var(--ink);
   text-decoration: none;
+}
+
+/* Courses page: tighter vertical rhythm than the long-form article pages. */
+.courses-content .article-section {
+  padding-bottom: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.courses-content .article-section h2 {
+  margin-bottom: 0.5rem;
+}
+
+.courses-content .callout {
+  margin: 0;
+  padding: 1rem 1.25rem;
+}
+
+.courses-content .course-manage {
+  margin-top: 1rem;
+}
+
+.courses-content .facts {
+  margin-top: 0.75rem;
+}
+
+.courses-content .article-section > :last-child,
+.courses-content .course-manage > :last-child {
+  margin-bottom: 0;
+}
+
+/* Edit icon in the top-right corner of each course (coordinators and administrators). */
+.course-section {
+  position: relative;
+}
+
+.course-section > h2 {
+  padding-right: 2.75rem;
+}
+
+.course-edit-button {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: grid;
+  place-items: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  padding: 0;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.course-edit-button:hover:not(:disabled),
+.course-edit-button:focus-visible {
+  color: var(--red-dark);
+  border-color: var(--red);
+  background: var(--red-tint);
+}
+
+.course-edit-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* Delete sits apart from Save/Cancel so it isn't hit by accident. */
+.course-form__delete {
+  margin-left: auto;
 }

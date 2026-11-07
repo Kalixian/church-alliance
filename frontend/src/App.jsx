@@ -4,6 +4,7 @@ import './App.css'
 import AuthProvider from './auth/AuthProvider'
 import Layout from './components/layout/Layout'
 import RequireRole from './components/layout/RequireRole'
+import { isPageVisible } from './components/layout/navLinks'
 import AboutPage from './pages/AboutPage'
 import AdminPage from './pages/AdminPage'
 import ContactPage from './pages/ContactPage'
@@ -12,7 +13,6 @@ import HomePage from './pages/HomePage'
 import {
   ApplicationsPage,
   CalendarPage,
-  CertificationsPage,
   EventDetailPage,
   EventsPage,
   GalleryPage,
@@ -29,18 +29,22 @@ function App() {
           <Route path="about" element={<AboutPage />} />
           <Route path="courses" element={<CoursesPage />} />
           <Route path="contact" element={<ContactPage />} />
-          <Route path="events" element={<EventsPage />} />
-          <Route path="events/:eventId" element={<EventDetailPage />} />
-          <Route path="calendar" element={<CalendarPage />} />
           <Route path="news" element={<NewsPage />} />
-          <Route path="gallery" element={<GalleryPage />} />
+          {/* Hidden pages fall through to the catch-all redirect below. */}
+          {isPageVisible('/events') ? (
+            <>
+              <Route path="events" element={<EventsPage />} />
+              <Route path="events/:eventId" element={<EventDetailPage />} />
+            </>
+          ) : null}
+          {isPageVisible('/calendar') ? <Route path="calendar" element={<CalendarPage />} /> : null}
+          {isPageVisible('/gallery') ? <Route path="gallery" element={<GalleryPage />} /> : null}
 
           <Route element={<RequireRole level="confirmed" />}>
             <Route path="members" element={<MembersPage />} />
           </Route>
           <Route element={<RequireRole level="manager" />}>
             <Route path="admin" element={<AdminPage />} />
-            <Route path="admin/certifications" element={<CertificationsPage />} />
           </Route>
           <Route element={<RequireRole level="admin" />}>
             <Route path="admin/applications" element={<ApplicationsPage />} />

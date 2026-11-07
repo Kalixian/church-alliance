@@ -1,15 +1,152 @@
+import { useEffect, useState } from 'react'
+import { useLocation } from 'react-router'
 import PageBanner from '../components/layout/PageBanner'
+import CourseForm from '../components/CourseForm'
+import { useAuth } from '../auth/authContext'
 
-const courses = [
-  ['clean-out', 'ER 200 Clean Out'],
-  ['site-assessment', 'ER 200 Site Assessment'],
-  ['team-leader', 'ER 200 Team Leader'],
-  ['on-site-manager', 'On-Site Manager'],
-  ['long-term-recovery', 'Long-Term Recovery'],
-  ['cpr', 'CPR'],
-]
+// Courses are the certifications stored by the API ("courses" to visitors).
+const COURSE_LIMIT = 100
+
+function slugify(text) {
+  return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'course'
+}
+
+// Paragraphs are separated by a blank line; a paragraph whose lines all
+// start with "- " is a list of short facts (see app/db/certification/seed.py).
+function CourseDescription({ text }) {
+  if (!text?.trim()) {
+    return <p>Details coming soon.</p>
+  }
+
+  return text.trim().split(/\n\s*\n/).map((block, index) => {
+    const lines = block.split('\n').map((line) => line.trim()).filter(Boolean)
+    if (lines.every((line) => line.startsWith('- '))) {
+      return (
+        <ul key={index} className="facts">
+          {lines.map((line) => <li key={line}>{line.slice(2)}</li>)}
+        </ul>
+      )
+    }
+    return <p key={index}>{lines.join(' ')}</p>
+  })
+}
+
+function PencilIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+      <path
+        d="M4 20h4L18.5 9.5a2.12 2.12 0 0 0-3-3L5 17v3z M13.5 7.5l3 3"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+async function errorDetail(response, fallback) {
+  const body = await response.json().catch(() => ({}))
+  return typeof body.detail === 'string' ? body.detail : fallback
+}
 
 function CoursesPage() {
+  const { apiBaseUrl, token, isManager } = useAuth()
+  const { hash } = useLocation()
+  const [courses, setCourses] = useState([])
+  const [status, setStatus] = useState('loading')
+  const [reloadKey, setReloadKey] = useState(0)
+  // null, 'new', or the id of the course being edited.
+  const [editing, setEditing] = useState(null)
+  const [busyId, setBusyId] = useState(null)
+  const canManage = isManager && Boolean(token)
+
+  // Bring the form that just opened into view and put the cursor in it.
+  useEffect(() => {
+    if (!editing) return
+    const form = document.querySelector('.course-form')
+    form?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    form?.querySelector('input')?.focus({ preventScroll: true })
+  }, [editing])
+
+  useEffect(() => {
+    let cancelled = false
+    fetch(`${apiBaseUrl}/api/v1/certifications?limit=${COURSE_LIMIT}`)
+      .then((response) => {
+        if (!response.ok) throw new Error('Unable to load courses.')
+        return response.json()
+      })
+      .then((data) => {
+        if (cancelled) return
+        setCourses(data)
+        setStatus('ready')
+      })
+      .catch(() => {
+        if (!cancelled) setStatus('error')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [apiBaseUrl, reloadKey])
+
+  // Give each course a unique anchor for the table of contents.
+  const seen = new Map()
+  const anchored = courses.map((course) => {
+    const base = slugify(course.name)
+    const count = seen.get(base) || 0
+    seen.set(base, count + 1)
+    return { ...course, anchor: count ? `${base}-${count + 1}` : base }
+  })
+
+  // The layout's scroll-to-hash runs before the courses arrive; retry once they render.
+  useEffect(() => {
+    if (status !== 'ready' || !hash) return
+    document.getElementById(decodeURIComponent(hash.slice(1)))?.scrollIntoView()
+  }, [status, hash])
+
+  const saveCourse = async (course, values) => {
+    setBusyId(course?.id || 'new')
+    try {
+      const response = await fetch(
+        course ? `${apiBaseUrl}/api/v1/certifications/${course.id}` : `${apiBaseUrl}/api/v1/certifications`,
+        {
+          method: course ? 'PATCH' : 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(values),
+        },
+      )
+      if (!response.ok) {
+        throw new Error(await errorDetail(response, 'Unable to save course.'))
+      }
+      setEditing(null)
+      setReloadKey((key) => key + 1)
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  // Called from the edit form; errors propagate so the form can show them.
+  const deleteCourse = async (course) => {
+    if (!window.confirm(`Delete the course "${course.name}"? This cannot be undone.`)) {
+      return
+    }
+    setBusyId(course.id)
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/v1/certifications/${course.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!response.ok) {
+        throw new Error(await errorDetail(response, 'Unable to delete course.'))
+      }
+      setEditing(null)
+      setReloadKey((key) => key + 1)
+    } finally {
+      setBusyId(null)
+    }
+  }
+
   return (
     <>
       <PageBanner eyebrow="Training" title="Courses">
@@ -20,14 +157,16 @@ function CoursesPage() {
         <div className="layout">
           <nav className="toc" aria-label="Courses on this page">
             <h2>Courses</h2>
-            <ol>
-              {courses.map(([id, label]) => (
-                <li key={id}><a href={`#${id}`}>{label}</a></li>
-              ))}
-            </ol>
+            {anchored.length ? (
+              <ol>
+                {anchored.map((course) => (
+                  <li key={course.id}><a href={`#${course.anchor}`}>{course.name}</a></li>
+                ))}
+              </ol>
+            ) : null}
           </nav>
 
-          <div>
+          <div className="courses-content" aria-live="polite">
             <section className="article-section" id="er-200-series" aria-label="About the ER 200 series">
               <div className="callout">
                 <p>
@@ -38,113 +177,62 @@ function CoursesPage() {
                   community.
                 </p>
               </div>
+
+              {canManage ? (
+                <div className="course-manage">
+                  {editing === 'new' ? (
+                    <CourseForm
+                      isSaving={busyId === 'new'}
+                      onSave={(values) => saveCourse(null, values)}
+                      onCancel={() => setEditing(null)}
+                    />
+                  ) : (
+                    <button type="button" className="button button--small button--outline" onClick={() => setEditing('new')}>
+                      <span aria-hidden="true">+</span> Add Course
+                    </button>
+                  )}
+                </div>
+              ) : null}
             </section>
 
-            <section className="article-section" id="clean-out">
-              <h2><span className="tag">ER 200</span>Clean Out (Muck-Out)</h2>
-              <p>
-                Participants in this class, Cleaning Out Flooded Homes, more
-                commonly referred to as “mucking out,” will learn about current
-                best practices and safety procedures for cleaning out,
-                stabilizing, and sanitizing water-damaged homes.
-              </p>
-            </section>
+            {status === 'loading' ? <p>Loading courses…</p> : null}
+            {status === 'error' ? (
+              <p>Sorry, the course list could not be loaded. Please try again later.</p>
+            ) : null}
+            {status === 'ready' && anchored.length === 0 ? (
+              <p>No courses are listed right now. Please check back soon.</p>
+            ) : null}
 
-            <section className="article-section" id="site-assessment">
-              <h2><span className="tag">ER 200</span>Site Assessment</h2>
-              <p>
-                Participants in this class, Site Assessment (ERT200SA), will
-                learn how to assess the physical damage to a disaster-affected
-                residence in order to plan and prepare for the Early Response
-                Team to safely access and secure the property from further
-                damage.
-              </p>
-              <p>
-                Participants will learn how to look for structural problems that
-                impact ER safety and effectiveness. The class will help identify
-                tools useful for damage assessment and, as always, how to
-                sensitively and respectfully discuss the needs with the
-                homeowners.
-              </p>
-            </section>
-
-            <section className="article-section" id="team-leader">
-              <h2><span className="tag">ER 200</span>Team Leader</h2>
-              <p>
-                Servant leadership is a philosophy and set of practices that
-                enrich the lives of individuals, build better organizations, and
-                ultimately create a more just and caring world. A servant leader
-                focuses primarily on the growth and well-being of people and the
-                communities to which they belong. Traditional leadership
-                generally involves the accumulation and exercise of power by one
-                at the “top of the pyramid.” By comparison, the servant leader
-                shares power, puts the needs of others first, and helps people
-                develop and perform as well as possible.
-              </p>
-              <p>
-                In this class, we will discuss the job functions of all ERT
-                members, as well as give some helpful hints and checklists for
-                planning the trip.
-              </p>
-            </section>
-
-            <section className="article-section" id="on-site-manager">
-              <h2><span className="tag">OSM</span>On-Site Manager</h2>
-              <p>
-                This class will give a volunteer the tools to help establish a
-                temporary response center at a local church (or other facility
-                as designated by the community) for the purpose of coordinating
-                the work of the ERTs and thus bringing the response quickly to a
-                community.
-              </p>
-            </section>
-
-            <section className="article-section" id="long-term-recovery">
-              <h2><span className="tag">LTR</span>Long-Term Recovery</h2>
-              <p>
-                The storms have come and gone, but the evidence of their impact
-                will be with us for years to come. As these words are being
-                written, we are in the midst of hurricane season once again.
-                There have been storms, and more storms will come. But we also
-                know that with God’s help and with one another, there will also
-                be hope, healing, and recovery.
-              </p>
-              <p>
-                We work to restore hope to families who thought they were
-                forgotten. Our hope is to continue rebuilding the homes and lives
-                of disaster survivors, which would not be possible without your
-                gift of service.
-              </p>
-              <p>
-                The goal of recovery is to bring a community back to a new normal
-                after it has been devastated by a disaster.
-              </p>
-              <p>
-                No matter how a group is structured or what it calls
-                itself (unmet needs committee, interfaith organization,
-                coalition, roundtable, partnership, coordinating council, etc.),
-                the goal is the same: to unite recovery resources with community
-                needs in order to ensure that even the most vulnerable in the
-                community recover from disaster.
-              </p>
-            </section>
-
-            <section className="article-section" id="cpr">
-              <h2>CPR</h2>
-              <p>
-                Cardiopulmonary resuscitation (CPR) is an emergency procedure
-                used during cardiac or respiratory arrest that involves chest
-                compressions. You can save someone’s life, no matter who you are.
-                Lay rescuers include people with CPR certification (you take
-                classes and get an official certificate). The course will include
-                AED training.
-              </p>
-              <ul className="facts">
-                <li>About 2 hours</li>
-                <li>$55 per person</li>
-                <li>Includes AED training</li>
-              </ul>
-            </section>
+            {anchored.map((course) => (
+              <section key={course.id} className="article-section course-section" id={course.anchor}>
+                {canManage && editing === course.id ? (
+                  <CourseForm
+                    course={course}
+                    isSaving={busyId === course.id}
+                    onSave={(values) => saveCourse(course, values)}
+                    onDelete={() => deleteCourse(course)}
+                    onCancel={() => setEditing(null)}
+                  />
+                ) : (
+                  <>
+                    {canManage ? (
+                      <button
+                        type="button"
+                        className="course-edit-button"
+                        onClick={() => setEditing(course.id)}
+                        disabled={busyId !== null}
+                        aria-label={`Edit ${course.name}`}
+                        title="Edit course"
+                      >
+                        <PencilIcon />
+                      </button>
+                    ) : null}
+                    <h2>{course.name}</h2>
+                    <CourseDescription text={course.description} />
+                  </>
+                )}
+              </section>
+            ))}
           </div>
         </div>
       </div>

@@ -24,9 +24,6 @@ function AdminPage() {
     <ToolPage eyebrow="Members area" title="Admin" intro="Tools for coordinators and administrators.">
       <div className="management-tools">
         <p>Asset, Experience management incomplete. Maybe Participating Church information management as well?</p>
-        <Link className="management-tool-link" to="/admin/certifications">
-          Certifications
-        </Link>
         {isAdmin ? (
           <Link className="management-tool-link" to="/admin/applications">
             Site Access Applications ({applicantCount})
