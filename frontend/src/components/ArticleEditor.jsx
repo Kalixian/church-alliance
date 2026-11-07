@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { createEditor, Editor, Element as SlateElement, Transforms } from 'slate'
+import { createEditor, Editor, Element as SlateElement, Range, Transforms } from 'slate'
 import { Editable, Slate, withReact } from 'slate-react'
 import { withHistory } from 'slate-history'
 import { ArticlePhotosEditor } from './ArticlePhotos'
@@ -42,34 +42,53 @@ function toggleMark(editor, format) {
   }
 }
 
+const isList = (node) => SlateElement.isElement(node) && node.type === 'bulleted-list'
+const isListItem = (node) => SlateElement.isElement(node) && node.type === 'list-item'
+
+// Moves the selected list items out of their list as blocks of `type`. `split` keeps the items before
+// and after the selection in their own lists instead of breaking the whole list apart.
+function liftOutOfList(editor, type) {
+  Transforms.setNodes(editor, { type }, { match: isListItem })
+  Transforms.unwrapNodes(editor, { match: isList, split: true })
+}
+
 function setBlockType(editor, type) {
-  Transforms.unwrapNodes(editor, {
-    match: (node) => SlateElement.isElement(node) && node.type === 'bulleted-list',
-  })
+  if (Editor.above(editor, { match: isList })) {
+    liftOutOfList(editor, type)
+    return
+  }
   Transforms.setNodes(editor, { type }, { match: (node) => SlateElement.isElement(node) && Editor.isBlock(editor, node) })
 }
 
 function toggleBulletedList(editor) {
-  const isInList = Editor.nodes(editor, {
-    match: (node) => SlateElement.isElement(node) && node.type === 'bulleted-list',
-  }).next().value
-
-  if (isInList) {
-    Transforms.unwrapNodes(editor, {
-      match: (node) => SlateElement.isElement(node) && node.type === 'bulleted-list',
-    })
-    Transforms.setNodes(editor, { type: 'paragraph' }, {
-      match: (node) => SlateElement.isElement(node) && node.type === 'list-item',
-    })
+  if (Editor.nodes(editor, { match: isList }).next().value) {
+    liftOutOfList(editor, 'paragraph')
     return
   }
 
   Transforms.setNodes(editor, { type: 'list-item' }, {
     match: (node) => SlateElement.isElement(node) && Editor.isBlock(editor, node),
   })
-  Transforms.wrapNodes(editor, { type: 'bulleted-list', children: [] }, {
-    match: (node) => SlateElement.isElement(node) && node.type === 'list-item',
-  })
+  Transforms.wrapNodes(editor, { type: 'bulleted-list', children: [] }, { match: isListItem })
+}
+
+// Enter on an empty bullet, or Backspace at the start of a bullet, ends the list there,
+// as in most word processors.
+function handleListKeys(editor, event) {
+  if (event.key !== 'Enter' && event.key !== 'Backspace') return
+  if (event.key === 'Enter' && event.shiftKey) return
+  const { selection } = editor
+  if (!selection || !Range.isCollapsed(selection)) return
+  const item = Editor.above(editor, { match: isListItem })
+  if (!item) return
+  const [, itemPath] = item
+
+  const isEmpty = Editor.string(editor, itemPath) === ''
+  const isAtStart = Editor.isStart(editor, selection.anchor, itemPath)
+  if ((event.key === 'Enter' && isEmpty) || (event.key === 'Backspace' && isAtStart)) {
+    event.preventDefault()
+    liftOutOfList(editor, 'paragraph')
+  }
 }
 
 const responseError = async (response, fallback) => {
@@ -239,6 +258,7 @@ function ArticleEditor({ article, apiBaseUrl, token, onSaved, onDelete, onCancel
               className="article-editor-input"
               renderElement={renderElement}
               renderLeaf={renderLeaf}
+              onKeyDown={(event) => handleListKeys(editor, event)}
               placeholder="Write the article..."
               spellCheck
             />

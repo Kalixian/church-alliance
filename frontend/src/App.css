@@ -1550,3 +1550,7 @@ a.management-tool-link {
 .course-form__delete {
   margin-left: auto;
 }
+
+.gallery-lightbox-content .article-lightbox-caption {
+  text-align: center;
+}

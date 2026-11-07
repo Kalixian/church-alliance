@@ -215,7 +215,6 @@ export function ArticlePhotoGallery({ apiBaseUrl, galleryId }) {
             aria-label={`View ${photo.caption || 'untitled photo'}`}
           >
             {photo.url ? <img src={photo.url} alt={photo.caption || ''} loading="lazy" /> : <span className="missing-image">No image</span>}
-            {photo.caption ? <span className="thumbnail-caption">{photo.caption}</span> : null}
           </button>
         ))}
       </div>
@@ -224,7 +223,7 @@ export function ArticlePhotoGallery({ apiBaseUrl, galleryId }) {
           <div className="gallery-lightbox-content" role="dialog" aria-modal="true" aria-label="Article photo" onClick={(event) => event.stopPropagation()}>
             <button type="button" className="gallery-lightbox-close" onClick={() => setOpenIndex(null)} aria-label="Close photo">Close</button>
             {openPhoto.url ? <img src={openPhoto.url} alt={openPhoto.caption || 'Untitled photo'} /> : null}
-            <p>{openPhoto.caption || ''}</p>
+            {openPhoto.caption ? <p className="article-lightbox-caption">{openPhoto.caption}</p> : null}
             {photos.length > 1 ? (
               <div className="article-lightbox-nav">
                 <button type="button" onClick={() => setOpenIndex((openIndex - 1 + photos.length) % photos.length)}>Previous</button>
