@@ -50,6 +50,12 @@ For running the API and React app on a development machine, see
    ```
    Within a minute or so `https://<your domain>` should load with a valid
    certificate. `docker compose logs -f caddy` shows certificate progress.
+6. **Seed the courses:** add the starter courses (from the old static
+   Courses page) to the database:
+   ```sh
+   docker compose exec api python -m app.db.certification.seed
+   ```
+   It skips courses whose names already exist, so it is safe to re-run.
 
 Docker starts on boot and `restart: unless-stopped` brings the containers
 back after a reboot.
@@ -69,8 +75,9 @@ After editing `.env`, run `docker compose up -d api --force-recreate`.
 After editing `frontend/.env`, rebuild: `docker compose up -d --build frontend`
 (Vite bakes these values into the bundle).
 
-Run the API's maintenance commands inside its container, e.g. the abandoned
-upload cleanup (schedule this with cron) and the course seed:
+Run the API's maintenance commands inside its container (the database is on
+the container's volume), e.g. the abandoned upload cleanup (schedule this with
+cron) and the course seed from setup:
 
 ```sh
 docker compose exec api python -m app.storage.cleanup
@@ -112,6 +119,9 @@ hot reload, on any machine with Docker (no Python, uv or Node needed):
 cp example.env .env                     # fill in Supabase, Cloudinary, ...
 cp frontend/example.env frontend/.env   # Supabase URL + publishable key
 docker compose -f docker-compose.dev.yml up --build
+
+# once, in another terminal while it runs: add the starter courses
+docker compose -f docker-compose.dev.yml exec api python -m app.db.certification.seed
 ```
 
 - React app: http://localhost:5173. API: http://localhost:8000/docs.
